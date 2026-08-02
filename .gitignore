@@ -1,0 +1,9 @@
+.runtime/
+.venv/
+.setup-temp/
+__pycache__/
+*.py[cod]
+setup.log
+*.fleecepack
+Thumbs.db
+Desktop.ini

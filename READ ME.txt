@@ -1,0 +1,58 @@
+FLEECE MASS INSTALLER
+
+INSTALL
+
+1. Extract the whole folder from the ZIP. Do not run it from inside the ZIP.
+2. Double-click Installer.bat and leave the window open until every check passes.
+3. Double-click Mass Installer.pyw.
+
+Mass Installer setup does not need administrator access.
+
+USE
+
+Browse or search the catalog, select the apps you want, review the selection, and choose Install followed by the number of selected apps. Leave Mass Installer open while the current app finishes installing.
+
+Mass Installer uses exact, curated WinGet package IDs. WinGet uses its reviewed manifests and application publisher download locations. Some app installers may request administrator approval, show their own window, require license acceptance, or ask for a restart. Mass Installer never restarts Windows automatically.
+
+Tor Browser is not supported and is not included in the catalog.
+
+UPDATES AND REPAIR
+
+Close Mass Installer, then run Installer.bat again whenever you need to repair its private Python environment or PySide6 files. Setup refuses to run while the app or another setup window is open.
+
+WHAT THE INSTALLER ADDS
+
+- If compatible 64-bit Python 3.10 through 3.14 is installed, setup creates a private .venv inside this folder. Its packages are separate, but it still relies on that Python installation.
+- If compatible Python is unavailable or its private environment cannot be created, setup offers to place official embedded Python 3.14 inside .runtime. It is not registered with Windows.
+- PySide6 and its required components come from the official Python Package Index at pypi.org.
+- Setup and the app verify that Windows Package Manager is new enough and that the winget source matches Microsoft's official URL, identifier, type, and trusted status. They do not reset your sources or install App Installer.
+
+The official embedded Python archive and pip's official PyPI wheel are each checked against pinned SHA-256 checksums before either is used. If a file does not match, setup stops or repairs it safely.
+
+Setup does not change PATH, Python file associations, or globally installed Python packages. Mass Installer's runtime, packages, and logs stay in this folder.
+
+PRIVACY
+
+Mass Installer has no telemetry, analytics, accounts, uploads, or usage tracking. Your selections stay on your computer. App icons are bundled locally and are never fetched when the app opens.
+
+Internet access is required. Setup connects to official Python and PyPI sources. WinGet connects to Microsoft's verified winget source and to publisher download services for the apps you select.
+
+REMOVE
+
+Close Mass Installer and delete this folder to remove Mass Installer itself, including its private runtime, packages, and logs.
+
+Deleting this folder does NOT uninstall apps installed through Mass Installer. Those are normal Windows applications and must be removed separately through Windows Settings, WinGet, or their own uninstallers.
+
+TROUBLESHOOTING
+
+If setup fails, check the internet connection and run Installer.bat again. Setup details are saved in setup.log, and installation-session logs are kept under .runtime\logs. These local logs can contain package names, installer output, and local folder paths, so review them before sharing.
+
+If WinGet is missing, install or update App Installer from Microsoft and run Installer.bat again.
+
+Mass Installer.pyw switches to the private Python in this folder after Windows opens it. Keep the complete folder together; moving only one file breaks the private runtime lookup.
+
+SOURCE
+
+Source: https://github.com/fleecelolll/Mass-Installer
+
+This project was made with AI.
