@@ -2,7 +2,7 @@
 
 # mass installer
 
-A little tool I made with AI to quickly install or update useful Windows apps together through WinGet on 64-bit or ARM64 Windows.
+A little tool I made with AI to quickly install or update useful Windows apps together through WinGet locally on 64-bit Windows.
 
 </div>
 

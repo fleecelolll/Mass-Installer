@@ -78,6 +78,42 @@ def acquire_app_mutex() -> bool:
     return True
 
 
+def private_python_is_usable(
+    python_path: Path,
+    expected_prefix: Path,
+    require_virtual_environment: bool,
+) -> bool:
+    if not python_path.is_file():
+        return False
+    validation_code = (
+        "from pathlib import Path; import sys; "
+        "expected = Path(sys.argv[1]).resolve(); "
+        "actual = Path(sys.prefix).resolve(); "
+        "needs_venv = sys.argv[2] == '1'; "
+        "raise SystemExit(0 if actual == expected and "
+        "(not needs_venv or sys.prefix != sys.base_prefix) else 1)"
+    )
+    try:
+        result = subprocess.run(
+            [
+                str(python_path),
+                "-I",
+                "-c",
+                validation_code,
+                str(expected_prefix),
+                "1" if require_virtual_environment else "0",
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
 def bootstrap_local_python():
     command_mode = any(
         argument in {"--self-test", "--screenshot"} for argument in sys.argv[1:]
@@ -87,27 +123,42 @@ def bootstrap_local_python():
     except (OSError, UnicodeError):
         setup_mode = ""
     configured = {
-        "venv": VENV_PYTHON if command_mode else VENV_PYTHONW,
-        "embedded": EMBEDDED_PYTHON if command_mode else EMBEDDED_PYTHONW,
+        "venv": (
+            VENV_PYTHON,
+            VENV_PYTHON if command_mode else VENV_PYTHONW,
+            VENV_PYTHON.parent.parent,
+            True,
+        ),
+        "embedded": (
+            EMBEDDED_PYTHON,
+            EMBEDDED_PYTHON if command_mode else EMBEDDED_PYTHONW,
+            EMBEDDED_PYTHON.parent,
+            False,
+        ),
     }
-    local_python = configured.get(setup_mode)
-    if local_python is not None and not local_python.is_file():
-        local_python = None
+    configured_runtime = configured.get(setup_mode)
     current = os.path.normcase(os.path.realpath(sys.executable))
-    if local_python is None and "--self-test" in sys.argv and sys.flags.isolated:
+    if configured_runtime is not None:
+        validation_python, local_python, expected_prefix, needs_venv = configured_runtime
+        expected = os.path.normcase(os.path.realpath(local_python))
+        if current == expected and sys.flags.isolated:
+            return
+        if not local_python.is_file() or not private_python_is_usable(
+            validation_python,
+            expected_prefix,
+            needs_venv,
+        ):
+            configured_runtime = None
+    if configured_runtime is None and "--self-test" in sys.argv and sys.flags.isolated:
         setup_candidates = (VENV_PYTHON, EMBEDDED_PYTHON)
         if any(current == os.path.normcase(os.path.realpath(path)) for path in setup_candidates):
             return
-    if local_python is None:
+    if configured_runtime is None:
         show_native_setup_error(
-            "Setup is missing or incomplete.\n\n"
+            "Setup is missing, incomplete, or no longer usable.\n\n"
             "Run Installer.bat, let every check finish, then open this file again."
         )
         raise SystemExit(1)
-
-    expected = os.path.normcase(os.path.realpath(local_python))
-    if current == expected and sys.flags.isolated:
-        return
 
     try:
         subprocess.Popen(
@@ -2195,6 +2246,16 @@ class MassInstaller(QMainWindow):
 
 def run_self_test(application: QApplication) -> int:
     window = MassInstaller()
+    assert private_python_is_usable(
+        Path(sys.executable),
+        Path(sys.prefix),
+        sys.prefix != sys.base_prefix,
+    )
+    assert not private_python_is_usable(
+        APP_DIR / "missing-private-python.exe",
+        APP_DIR,
+        False,
+    )
     assert len(APP_CATALOG) == 78
     added_package_ids = {
         "Mozilla.Thunderbird",
