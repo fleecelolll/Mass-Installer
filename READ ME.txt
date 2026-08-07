@@ -6,7 +6,7 @@ INSTALL
 
 1. Extract the whole folder from the ZIP. Do not run it from inside the ZIP.
 2. Double-click Installer.bat and leave the window open until every check passes.
-3. Double-click Mass Installer.pyw.
+3. Double-click the "Mass Installer" shortcut created in this folder.
 
 Mass Installer setup does not need administrator access.
 
@@ -18,7 +18,7 @@ Mass Installer uses exact, curated WinGet package IDs. WinGet uses its reviewed 
 
 Tor Browser is not supported and is not included in the catalog.
 
-UPDATES AND REPAIR
+UPDATES
 
 Close Mass Installer, then run Installer.bat again whenever you need to repair its private Python environment or PySide6 files. Setup refuses to run while the app or another setup window is open.
 
@@ -28,10 +28,21 @@ WHAT THE INSTALLER ADDS
 - If compatible Python is unavailable or its private environment cannot be created, setup offers to place official embedded Python 3.14 inside .runtime. It is not registered with Windows.
 - PySide6 and its required components come from the official Python Package Index at pypi.org.
 - Setup and the app verify that Windows Package Manager is new enough and that the winget source matches Microsoft's official URL, identifier, type, and trusted status. They do not reset your sources or install App Installer.
+- A normal shortcut starts the tool with its private Python environment.
+
+- Installs one shared per-user Fleece Tools launcher here:
+
+  %LOCALAPPDATA%\Fleece Tools\Python Launcher
+
+- Sets .pyw files to use that shared launcher for your Windows account.
+
+The launcher first looks for .venv\Scripts\pythonw.exe beside the selected .pyw file, then .runtime\python\pythonw.exe beside it. It never uses another tool's private Python.
+
+Before the first Fleece Tools association change, setup exports existing per-user .pyw settings into the shared launcher folder. If setup cannot safely save an existing non-Fleece setting, it stops without overwriting it. If you choose a different .pyw app later, future setup runs leave that newer choice alone.
 
 The official embedded Python archive and pip's official PyPI wheel are each checked against pinned SHA-256 checksums before either is used. If a file does not match, setup stops or repairs it safely.
 
-Setup does not change PATH, Python file associations, or globally installed Python packages. Mass Installer's runtime, packages, and logs stay in this folder.
+Setup does not need administrator access, change PATH, install global Python packages, or install a background service. Mass Installer's runtime, packages, and logs stay in this folder.
 
 PRIVACY
 
@@ -45,15 +56,21 @@ Close Mass Installer and delete this folder to remove Mass Installer itself, inc
 
 Deleting this folder does NOT uninstall apps installed through Mass Installer. Those are normal Windows applications and must be removed separately through Windows Settings, WinGet, or their own uninstallers.
 
+The shared .pyw launcher can be used by every Fleece Tool, so deleting one tool does not remove it. To restore the .pyw settings that existed before Fleece Tools first changed them, run:
+
+  %LOCALAPPDATA%\Fleece Tools\Python Launcher\Restore pyw association.cmd
+
+The restore helper stops without overwriting a newer non-Fleece choice. After restoring, and after removing every Fleece Tool that uses the launcher, you can delete the shared Python Launcher folder. Its registry backup files can include local program names and paths, so review them before sharing.
+
 TROUBLESHOOTING
 
 If setup fails, check the internet connection and run Installer.bat again. Setup details are saved in setup.log, and installation-session logs are kept under .runtime\logs. These local logs can contain package names, installer output, and local folder paths, so review them before sharing.
 
 If WinGet is missing, install or update App Installer from Microsoft and run Installer.bat again.
 
-Mass Installer.pyw switches to the private Python in this folder after Windows opens it. Keep the complete folder together; moving only one file breaks the private runtime lookup.
+If the Mass Installer shortcut does not open, rerun Installer.bat and make sure every final check passes. Setup recreates the shortcut for the folder's current location. Keep the complete folder together; moving only one file breaks the private runtime lookup.
 
-SOURCE
+SOURCE AND RESPONSIBLE USE
 
 Source: https://github.com/fleecelolll/Mass-Installer
 

@@ -4,6 +4,7 @@
 __pycache__/
 *.py[cod]
 setup.log
+*.lnk
 *.fleecepack
 Thumbs.db
 Desktop.ini

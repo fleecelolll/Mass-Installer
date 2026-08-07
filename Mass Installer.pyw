@@ -9,6 +9,7 @@ import subprocess
 import sys
 import traceback
 from collections import deque
+from ctypes import wintypes
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -16,6 +17,7 @@ from typing import Optional
 
 
 APP_TITLE = "Mass Installer"
+APP_VERSION = "1.0.2"
 APP_DIR = Path(__file__).resolve().parent
 RUNTIME_DIR = APP_DIR / ".runtime"
 LOGS_DIR = RUNTIME_DIR / "logs"
@@ -32,9 +34,14 @@ OFFICIAL_WINGET_SOURCE_URL = "https://cdn.winget.microsoft.com/cache"
 OFFICIAL_WINGET_SOURCE_ID = "Microsoft.Winget.Source_8wekyb3d8bbwe"
 OFFICIAL_WINGET_SOURCE_TYPE = "Microsoft.PreIndexed.Package"
 WINGET_UPDATE_NOT_APPLICABLE = 0x8A15002B
-APP_MUTEX_NAME = r"Local\FleeceMassInstallerApp"
+APP_MUTEX_NAMES = (
+    r"Global\FleeceMassInstallerApp",
+    r"Local\FleeceMassInstallerApp",
+)
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 APP_MUTEX_HANDLE = None
+ERROR_ACCESS_DENIED = 5
+ERROR_ALREADY_EXISTS = 183
 
 
 def show_native_setup_error(message: str):
@@ -44,38 +51,60 @@ def show_native_setup_error(message: str):
         print(f"{APP_TITLE}: {message}", file=sys.stderr)
 
 
+if os.name == "nt":
+    NATIVE_KERNEL32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    NATIVE_KERNEL32.CreateMutexW.argtypes = (
+        ctypes.c_void_p,
+        wintypes.BOOL,
+        wintypes.LPCWSTR,
+    )
+    NATIVE_KERNEL32.CreateMutexW.restype = wintypes.HANDLE
+    NATIVE_KERNEL32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    NATIVE_KERNEL32.CloseHandle.restype = wintypes.BOOL
+else:
+    NATIVE_KERNEL32 = None
+
+
 def release_app_mutex():
     global APP_MUTEX_HANDLE
-    if APP_MUTEX_HANDLE is None or os.name != "nt":
+    if APP_MUTEX_HANDLE is None or NATIVE_KERNEL32 is None:
         return
-    close_handle = ctypes.windll.kernel32.CloseHandle
-    close_handle.argtypes = [ctypes.c_void_p]
-    close_handle.restype = ctypes.c_int
-    close_handle(APP_MUTEX_HANDLE)
+    NATIVE_KERNEL32.CloseHandle(APP_MUTEX_HANDLE)
     APP_MUTEX_HANDLE = None
+
+
+def _try_create_named_mutex(name):
+    if NATIVE_KERNEL32 is None:
+        return "unavailable", None
+    ctypes.set_last_error(0)
+    handle = NATIVE_KERNEL32.CreateMutexW(None, False, name)
+    error_code = ctypes.get_last_error()
+    if handle and error_code == ERROR_ALREADY_EXISTS:
+        NATIVE_KERNEL32.CloseHandle(handle)
+        return "exists", None
+    if handle:
+        return "acquired", handle
+    if error_code == ERROR_ACCESS_DENIED:
+        return "denied", None
+    return "failed", None
 
 
 def acquire_app_mutex() -> bool:
     global APP_MUTEX_HANDLE
-    if os.name != "nt":
+    if NATIVE_KERNEL32 is None:
         return True
-    kernel32 = ctypes.windll.kernel32
-    create_mutex = kernel32.CreateMutexW
-    create_mutex.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p]
-    create_mutex.restype = ctypes.c_void_p
-    close_handle = kernel32.CloseHandle
-    close_handle.argtypes = [ctypes.c_void_p]
-    close_handle.restype = ctypes.c_int
-    kernel32.SetLastError(0)
-    handle = create_mutex(None, False, APP_MUTEX_NAME)
-    if not handle:
+    for index, name in enumerate(APP_MUTEX_NAMES):
+        status, handle = _try_create_named_mutex(name)
+        if status == "acquired":
+            APP_MUTEX_HANDLE = handle
+            atexit.register(release_app_mutex)
+            return True
+        if status == "exists":
+            return False
+        if index == 0 and status == "denied":
+            continue
         return False
-    if kernel32.GetLastError() == 183:
-        close_handle(handle)
-        return False
-    APP_MUTEX_HANDLE = handle
-    atexit.register(release_app_mutex)
-    return True
+    return False
 
 
 def private_python_is_usable(
@@ -156,7 +185,8 @@ def bootstrap_local_python():
     if configured_runtime is None:
         show_native_setup_error(
             "Setup is missing, incomplete, or no longer usable.\n\n"
-            "Run Installer.bat, let every check finish, then open this file again."
+            "Run Installer.bat, let every check finish, then open the Mass "
+            "Installer shortcut again."
         )
         raise SystemExit(1)
 
@@ -186,7 +216,6 @@ try:
         QEvent,
         QPoint,
         QPointF,
-        QParallelAnimationGroup,
         QProcess,
         QPropertyAnimation,
         QRect,
@@ -201,11 +230,12 @@ try:
         QCloseEvent,
         QColor,
         QDesktopServices,
-        QIcon,
         QMouseEvent,
         QPainter,
         QPen,
+        QPixmap,
     )
+    from PySide6.QtSvg import QSvgRenderer
     from PySide6.QtWidgets import (
         QApplication,
         QCheckBox,
@@ -446,9 +476,16 @@ def app_icon_pixmap(app_definition: AppDefinition):
         return None
     if slug not in ICON_PIXMAP_CACHE:
         icon_path = ICONS_DIR / f"{slug}.svg"
-        icon = QIcon(str(icon_path)) if icon_path.is_file() else QIcon()
-        pixmap = icon.pixmap(19, 19)
-        ICON_PIXMAP_CACHE[slug] = None if pixmap.isNull() else pixmap
+        renderer = QSvgRenderer(str(icon_path)) if icon_path.is_file() else None
+        if renderer is None or not renderer.isValid():
+            ICON_PIXMAP_CACHE[slug] = None
+        else:
+            pixmap = QPixmap(19, 19)
+            pixmap.fill(Qt.transparent)
+            painter = QPainter(pixmap)
+            renderer.render(painter)
+            painter.end()
+            ICON_PIXMAP_CACHE[slug] = pixmap
     return ICON_PIXMAP_CACHE[slug]
 
 
@@ -591,7 +628,7 @@ class AnimatedDropdown(QWidget):
         self.items = list(items)
         self._current = self.items[current_index]
         self._animation = None
-        self._popup_direction = 1
+        self._closing = False
         self.option_buttons = []
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -621,9 +658,6 @@ class AnimatedDropdown(QWidget):
             surface_layout.addWidget(option)
             self.option_buttons.append(option)
         outer.addWidget(surface)
-        self.opacity_effect = QGraphicsOpacityEffect(self.popup)
-        self.popup.setGraphicsEffect(self.opacity_effect)
-
     def currentText(self):
         return self._current
 
@@ -637,10 +671,14 @@ class AnimatedDropdown(QWidget):
         self.hide_popup()
 
     def toggle_popup(self):
-        self.hide_popup() if self.popup.isVisible() else self.show_popup()
+        if self.popup.isVisible() and not self._closing:
+            self.hide_popup()
+        else:
+            self.show_popup()
 
     def show_popup(self):
         self._stop_popup_animation()
+        self._closing = False
         popup_height = len(self.items) * 34 + 12
         popup_width = self.width()
         top_left = self.mapToGlobal(QPoint(0, 0))
@@ -648,41 +686,29 @@ class AnimatedDropdown(QWidget):
         screen = QApplication.screenAt(top_left)
         available = screen.availableGeometry() if screen else QRect()
         final_y = below_y
-        start_y = final_y - 8
         if available and below_y + popup_height > available.bottom():
             final_y = top_left.y() - popup_height - 4
-            start_y = final_y + 8
-            self._popup_direction = -1
-        else:
-            self._popup_direction = 1
         final_x = top_left.x()
         if available and final_x + popup_width > available.right():
             final_x = available.right() - popup_width
         final_x = max(available.left(), final_x) if available else final_x
         end_rect = QRect(final_x, final_y, popup_width, popup_height)
-        start_rect = QRect(final_x, start_y, popup_width, popup_height)
         QApplication.instance().installEventFilter(self)
-        self.popup.setGeometry(start_rect)
-        self.opacity_effect.setOpacity(0.0)
+        self.popup.setGeometry(end_rect)
+        self.popup.setWindowOpacity(0.0)
         self.popup.show()
         self.popup.raise_()
         self.button.set_expanded(True)
-        geometry = QPropertyAnimation(self.popup, b"geometry")
-        geometry.setDuration(150)
-        geometry.setStartValue(start_rect)
-        geometry.setEndValue(end_rect)
-        geometry.setEasingCurve(QEasingCurve.OutCubic)
-        opacity = QPropertyAnimation(self.opacity_effect, b"opacity")
-        opacity.setDuration(150)
+        opacity = QPropertyAnimation(self.popup, b"windowOpacity", self)
+        opacity.setDuration(110)
         opacity.setStartValue(0.0)
         opacity.setEndValue(1.0)
         opacity.setEasingCurve(QEasingCurve.OutCubic)
-        group = QParallelAnimationGroup()
-        group.addAnimation(geometry)
-        group.addAnimation(opacity)
-        self._animation = group
-        group.finished.connect(lambda current=group: self._popup_animation_finished(current, False))
-        group.start()
+        self._animation = opacity
+        opacity.finished.connect(
+            lambda current=opacity: self._popup_animation_finished(current, False)
+        )
+        opacity.start()
         try:
             selected_index = self.items.index(self._current)
         except ValueError:
@@ -693,31 +719,19 @@ class AnimatedDropdown(QWidget):
         if not self.popup.isVisible():
             return
         self._stop_popup_animation()
+        self._closing = True
         QApplication.instance().removeEventFilter(self)
-        current = self.popup.geometry()
-        end_rect = QRect(
-            current.x(),
-            current.y() - (5 * self._popup_direction),
-            current.width(),
-            current.height(),
-        )
-        geometry = QPropertyAnimation(self.popup, b"geometry")
-        geometry.setDuration(100)
-        geometry.setStartValue(current)
-        geometry.setEndValue(end_rect)
-        geometry.setEasingCurve(QEasingCurve.InCubic)
-        opacity = QPropertyAnimation(self.opacity_effect, b"opacity")
-        opacity.setDuration(100)
-        opacity.setStartValue(self.opacity_effect.opacity())
+        opacity = QPropertyAnimation(self.popup, b"windowOpacity", self)
+        opacity.setDuration(75)
+        opacity.setStartValue(self.popup.windowOpacity())
         opacity.setEndValue(0.0)
         opacity.setEasingCurve(QEasingCurve.InCubic)
-        group = QParallelAnimationGroup()
-        group.addAnimation(geometry)
-        group.addAnimation(opacity)
-        self._animation = group
+        self._animation = opacity
         self.button.set_expanded(False)
-        group.finished.connect(lambda current=group: self._popup_animation_finished(current, True))
-        group.start()
+        opacity.finished.connect(
+            lambda current=opacity: self._popup_animation_finished(current, True)
+        )
+        opacity.start()
 
     def _stop_popup_animation(self):
         if self._animation is None:
@@ -732,6 +746,8 @@ class AnimatedDropdown(QWidget):
             self._animation = None
         if hide_after:
             self.popup.hide()
+            self.popup.setWindowOpacity(1.0)
+            self._closing = False
             self.button.setFocus(Qt.PopupFocusReason)
         animation.deleteLater()
 
@@ -1174,7 +1190,7 @@ class MassInstaller(QMainWindow):
         self.preflight_stage = ""
         self.preflight_version_candidate = ""
         self.page_animation = None
-        self.page_animation_widget = None
+        self.page_animation_overlay = None
 
         self.preflight_timer = QTimer(self)
         self.preflight_timer.setSingleShot(True)
@@ -1307,13 +1323,6 @@ class MassInstaller(QMainWindow):
         self.stack.addWidget(self.build_review_page())
         self.stack.addWidget(self.build_install_page())
         self.stack.addWidget(self.build_results_page())
-        self.page_effects = {}
-        for index in range(self.stack.count()):
-            widget = self.stack.widget(index)
-            effect = QGraphicsOpacityEffect(widget)
-            effect.setOpacity(1.0)
-            widget.setGraphicsEffect(effect)
-            self.page_effects[index] = effect
         panel_layout.addWidget(self.stack, 1)
         self.set_page(self.SELECT_PAGE)
 
@@ -1538,26 +1547,31 @@ class MassInstaller(QMainWindow):
 
     def set_page(self, index: int):
         changed = self.stack.currentIndex() != index
-        if self.page_animation is not None:
-            animation = self.page_animation
-            self.page_animation = None
-            animation.stop()
-            animation.deleteLater()
-        if self.page_animation_widget is not None:
-            self.page_effects[self.page_animation_widget].setOpacity(1.0)
-            self.page_animation_widget = None
+        self.clear_page_animation()
+        old_page = self.stack.grab() if changed and self.isVisible() else None
         self.stack.setCurrentIndex(index)
-        if changed and self.isVisible():
-            effect = self.page_effects[index]
-            effect.setOpacity(0.35)
+        if old_page is not None and not old_page.isNull():
+            overlay = QLabel(self.stack)
+            overlay.setPixmap(old_page)
+            overlay.setGeometry(self.stack.rect())
+            overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
+            effect = QGraphicsOpacityEffect(overlay)
+            effect.setOpacity(1.0)
+            overlay.setGraphicsEffect(effect)
+            overlay.show()
+            overlay.raise_()
             animation = QPropertyAnimation(effect, b"opacity", self)
-            animation.setDuration(145)
-            animation.setStartValue(0.35)
-            animation.setEndValue(1.0)
+            animation.setDuration(120)
+            animation.setStartValue(1.0)
+            animation.setEndValue(0.0)
             animation.setEasingCurve(QEasingCurve.OutCubic)
-            animation.finished.connect(lambda current=animation: self.page_animation_finished(current))
+            animation.finished.connect(
+                lambda current=animation, current_overlay=overlay: (
+                    self.page_animation_finished(current, current_overlay)
+                )
+            )
             self.page_animation = animation
-            self.page_animation_widget = index
+            self.page_animation_overlay = overlay
             animation.start()
         for label_index, label in enumerate(self.step_labels):
             label.setProperty("active", label_index == index)
@@ -1571,12 +1585,25 @@ class MassInstaller(QMainWindow):
         }
         QTimer.singleShot(0, lambda target=focus_targets[index]: target.setFocus(Qt.OtherFocusReason))
 
-    def page_animation_finished(self, animation):
+    def clear_page_animation(self):
+        if self.page_animation is not None:
+            animation = self.page_animation
+            self.page_animation = None
+            animation.stop()
+            animation.deleteLater()
+        if self.page_animation_overlay is not None:
+            overlay = self.page_animation_overlay
+            self.page_animation_overlay = None
+            overlay.hide()
+            overlay.deleteLater()
+
+    def page_animation_finished(self, animation, overlay):
         if self.page_animation is animation:
             self.page_animation = None
-            if self.page_animation_widget is not None:
-                self.page_effects[self.page_animation_widget].setOpacity(1.0)
-                self.page_animation_widget = None
+        if self.page_animation_overlay is overlay:
+            self.page_animation_overlay = None
+        overlay.hide()
+        overlay.deleteLater()
         animation.deleteLater()
 
     def app_toggled(self, package_id: str, checked: bool):
@@ -2245,6 +2272,11 @@ class MassInstaller(QMainWindow):
 
 
 def run_self_test(application: QApplication) -> int:
+    assert APP_VERSION == "1.0.2"
+    assert acquire_app_mutex()
+    assert not acquire_app_mutex()
+    release_app_mutex()
+    assert APP_MUTEX_HANDLE is None
     window = MassInstaller()
     assert private_python_is_usable(
         Path(sys.executable),
@@ -2381,6 +2413,9 @@ if __name__ == "__main__":
             raise SystemExit(1)
     sys.excepthook = sys.__excepthook__ if "--self-test" in sys.argv else handle_unhandled_exception
     app = QApplication(sys.argv)
+    app.setApplicationVersion(APP_VERSION)
+    app.setApplicationName(APP_TITLE)
+    app.setOrganizationName("Fleece")
     app.setStyle("Fusion")
     if "--self-test" in sys.argv:
         raise SystemExit(run_self_test(app))
