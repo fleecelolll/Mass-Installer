@@ -24,8 +24,8 @@ Close Mass Installer, then run Installer.bat again whenever you need to repair i
 
 WHAT THE INSTALLER ADDS
 
-- If compatible 64-bit Python 3.10 through 3.14 is installed, setup creates a private .venv inside this folder. Its packages are separate, but it still relies on that Python installation.
-- If compatible Python is unavailable or its private environment cannot be created, setup offers to place official embedded Python 3.14 inside .runtime. It is not registered with Windows.
+- Installs or repairs official 64-bit Python 3.14.7 privately in .runtime\python.
+- Does not use or modify Microsoft Store or system Python.
 - PySide6 and its required components come from the official Python Package Index at pypi.org.
 - Setup and the app verify that Windows Package Manager is new enough and that the winget source matches Microsoft's official URL, identifier, type, and trusted status. They do not reset your sources or install App Installer.
 - A normal shortcut starts the tool with its private Python environment.
@@ -36,7 +36,7 @@ WHAT THE INSTALLER ADDS
 
 - Sets .pyw files to use that shared launcher for your Windows account.
 
-The launcher first looks for .venv\Scripts\pythonw.exe beside the selected .pyw file, then .runtime\python\pythonw.exe beside it. It never uses another tool's private Python.
+The launcher first looks for .runtime\python\pythonw.exe beside the selected .pyw file, then keeps .venv\Scripts\pythonw.exe only as a fallback for older Fleece Tool releases. It never uses another tool's private Python.
 
 Before the first Fleece Tools association change, setup exports existing per-user .pyw settings into the shared launcher folder. If setup cannot safely save an existing non-Fleece setting, it stops without overwriting it. If you choose a different .pyw app later, future setup runs leave that newer choice alone.
 
@@ -73,5 +73,7 @@ If the Mass Installer shortcut does not open, rerun Installer.bat and make sure 
 SOURCE AND RESPONSIBLE USE
 
 Source: https://github.com/fleecelolll/Mass-Installer
+
+The source is public for transparency and security review. Copyright 2026 Fleece. All rights reserved. No license is granted to use, modify, redistribute, sell, or publish derivative versions beyond the limited rights provided by the hosting platform.
 
 This project was made with AI.

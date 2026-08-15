@@ -17,7 +17,7 @@ from typing import Optional
 
 
 APP_TITLE = "Mass Installer"
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 APP_DIR = Path(__file__).resolve().parent
 RUNTIME_DIR = APP_DIR / ".runtime"
 LOGS_DIR = RUNTIME_DIR / "logs"
@@ -767,8 +767,6 @@ class AnimatedDropdown(QWidget):
 
 
 class SmoothScrollArea(QScrollArea):
-    """A scroll area with short, retargetable wheel animations."""
-
     def __init__(self, parent=None):
         super().__init__(parent)
         bar = self.verticalScrollBar()
@@ -805,7 +803,6 @@ class SmoothScrollArea(QScrollArea):
         pixel_y = event.pixelDelta().y()
         angle_y = event.angleDelta().y()
         if pixel_y:
-            # Precision touchpads already provide smooth, high-frequency movement.
             self._stop_and_sync_scroll()
             super().wheelEvent(event)
             self._sync_scroll_target()
@@ -845,8 +842,6 @@ class SmoothScrollArea(QScrollArea):
 
 
 class AnimatedCheckBox(QCheckBox):
-    """A fully custom rounded checkbox with a smooth fill and drawn tick."""
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setTristate(False)
@@ -951,8 +946,6 @@ class AnimatedCheckBox(QCheckBox):
 
 
 class ElidedLabel(QLabel):
-    """A single-line label that keeps narrow layouts readable."""
-
     def __init__(self, text: str, parent=None):
         super().__init__(parent)
         self.full_text = text
@@ -1623,8 +1616,6 @@ class MassInstaller(QMainWindow):
         for category, card in self.category_cards.items():
             rows = card.rows
             selected = sum(row.isChecked() for row in rows)
-            # isVisible() is false while the page or window itself is hidden.
-            # isHidden() reflects whether filtering hid the individual row.
             visible_rows = [row for row in rows if not row.isHidden()]
             selected_visible = sum(row.isChecked() for row in visible_rows)
             card.update_state(selected, len(visible_rows), selected_visible)
@@ -2272,7 +2263,7 @@ class MassInstaller(QMainWindow):
 
 
 def run_self_test(application: QApplication) -> int:
-    assert APP_VERSION == "1.0.2"
+    assert APP_VERSION == "1.0.3"
     assert acquire_app_mutex()
     assert not acquire_app_mutex()
     release_app_mutex()
