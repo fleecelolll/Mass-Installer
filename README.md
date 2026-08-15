@@ -35,13 +35,13 @@ The setup and app check that WinGet is new enough and that the `winget` source m
 3. run `Installer.bat` and leave its window open until every final check passes
 4. open the `Mass Installer` shortcut created in the folder
 
-The setup keeps the app runtime inside the extracted folder and does not need administrator access. It also installs one small shared launcher in `%LOCALAPPDATA%\Fleece Tools\Python Launcher` and sets `.pyw` files to open with it for your Windows account. The launcher always uses the selected tool's sibling `.venv\Scripts\pythonw.exe`, then its sibling `.runtime\python\pythonw.exe`. It does not change PATH, install global Python packages, or use another tool's private Python. You can copy the shortcut to your Desktop or pin it to the taskbar.
+The setup keeps its private Python runtime inside the extracted folder, and the app shortcut uses that runtime directly so it does not depend on Microsoft Store or system Python. Setup does not need administrator access, change PATH, or install global packages. It also installs one small shared launcher in `%LOCALAPPDATA%\Fleece Tools\Python Launcher` and sets `.pyw` files to open with it for your Windows account. The launcher prefers the selected tool's sibling `.runtime\python\pythonw.exe` and keeps a legacy `.venv\Scripts\pythonw.exe` fallback for older Fleece Tool releases; it never uses another tool's Python. You can copy the shortcut to your Desktop or pin it to the taskbar.
 
 Before the first Fleece Tools association change, setup exports any existing per-user `.pyw` settings to that shared folder. If the previous setting cannot be backed up safely, setup stops without overwriting it. A later non-Fleece choice is also left alone.
 
 The download contains the installer, app, and bundled app icons. Mass Installer keeps its Python environment, PySide6 packages, and other app-specific files inside this folder.
 
-If compatible 64-bit Python 3.10 through 3.14 is already installed, setup creates a private **.venv** for Mass Installer. That environment keeps its packages separate but still relies on the existing Python installation. If compatible Python is unavailable or its private environment cannot be created, setup offers to download the official Python 3.14 embedded runtime into **.runtime** instead.
+Setup installs or repairs official 64-bit Python 3.14.7 privately in **.runtime\python**. It does not use or modify Microsoft Store or system Python, and it removes an obsolete **.venv** only after the private runtime passes validation.
 
 Close Mass Installer, then run **Installer.bat** again whenever you need to repair the app's private runtime. Setup safely refuses to run while the app or another setup window is open.
 
@@ -78,6 +78,10 @@ If setup fails, check the internet connection and run **Installer.bat** again. S
 If the **Mass Installer** shortcut does not open the app, run **Installer.bat** again and make sure every final check passes. Setup recreates the shortcut for the folder's current location. Keep the complete folder together; moving only one file breaks the private-runtime lookup.
 
 An individual app can fail because its publisher installer is unavailable, WinGet metadata is temporarily out of date, Windows requires user approval, or the installer returns an error. Mass Installer reports each app separately so one failure does not hide the rest of the results.
+
+## source use
+
+The source is public for transparency and security review. Copyright 2026 Fleece. All rights reserved. No license is granted to use, modify, redistribute, sell, or publish derivative versions beyond the limited rights provided by the hosting platform.
 
 ## note
 
