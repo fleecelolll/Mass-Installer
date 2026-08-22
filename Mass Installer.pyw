@@ -17,7 +17,7 @@ from typing import Optional
 
 
 APP_TITLE = "Mass Installer"
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.0.4"
 APP_DIR = Path(__file__).resolve().parent
 RUNTIME_DIR = APP_DIR / ".runtime"
 LOGS_DIR = RUNTIME_DIR / "logs"
@@ -39,6 +39,8 @@ APP_MUTEX_NAMES = (
     r"Local\FleeceMassInstallerApp",
 )
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+MAX_INSTALL_OUTPUT_LINE_CHARS = 8192
+OUTPUT_TRUNCATION_PREFIX = "[earlier output truncated] "
 APP_MUTEX_HANDLE = None
 ERROR_ACCESS_DENIED = 5
 ERROR_ALREADY_EXISTS = 183
@@ -512,6 +514,13 @@ def validated_profile_packages(payload) -> list[str]:
     if not isinstance(packages, list) or not all(isinstance(value, str) for value in packages):
         raise ValueError("The package list is invalid.")
     return packages
+
+
+def bounded_install_output_line(value: str) -> str:
+    if len(value) <= MAX_INSTALL_OUTPUT_LINE_CHARS:
+        return value
+    tail_length = MAX_INSTALL_OUTPUT_LINE_CHARS - len(OUTPUT_TRUNCATION_PREFIX)
+    return OUTPUT_TRUNCATION_PREFIX + value[-tail_length:]
 
 
 class TrafficLightButton(QPushButton):
@@ -1986,12 +1995,16 @@ class MassInstaller(QMainWindow):
     def consume_install_text(self, text: str, final: bool):
         self.process_line_buffer += text.replace("\r\n", "\n").replace("\r", "\n")
         parts = self.process_line_buffer.split("\n")
-        self.process_line_buffer = "" if final else parts.pop()
+        self.process_line_buffer = (
+            "" if final else bounded_install_output_line(parts.pop())
+        )
         log_messages = []
         for raw_line in parts:
+            raw_line = bounded_install_output_line(raw_line)
             line = ANSI_RE.sub("", raw_line).replace("\x08", "").strip()
             if not line:
                 continue
+            line = bounded_install_output_line(line)
             progress_characters = sum(character in "█▓▒░-\\|/" for character in line)
             if progress_characters > max(8, len(line) // 2):
                 continue
@@ -2263,7 +2276,7 @@ class MassInstaller(QMainWindow):
 
 
 def run_self_test(application: QApplication) -> int:
-    assert APP_VERSION == "1.0.3"
+    assert APP_VERSION == "1.0.4"
     assert acquire_app_mutex()
     assert not acquire_app_mutex()
     release_app_mutex()
@@ -2326,6 +2339,33 @@ def run_self_test(application: QApplication) -> int:
         pass
     else:
         raise AssertionError("Boolean profile schema was accepted")
+    oversized_output = "old-context:" + (
+        "x" * (MAX_INSTALL_OUTPUT_LINE_CHARS * 3)
+    ) + ":critical-tail"
+    bounded_output = bounded_install_output_line(oversized_output)
+    assert len(bounded_output) == MAX_INSTALL_OUTPUT_LINE_CHARS
+    assert bounded_output.startswith(OUTPUT_TRUNCATION_PREFIX)
+    assert bounded_output.endswith(":critical-tail")
+    window.current_app = APP_CATALOG[0]
+    window.current_output_lines.clear()
+    window.process_line_buffer = ""
+    window.consume_install_text(oversized_output, final=False)
+    assert len(window.process_line_buffer) == MAX_INSTALL_OUTPUT_LINE_CHARS
+    window.consume_install_text(":newest-error\n", final=False)
+    assert len(window.current_output_lines) == 1
+    assert len(window.current_output_lines[0]) == MAX_INSTALL_OUTPUT_LINE_CHARS
+    assert window.current_output_lines[0].startswith(OUTPUT_TRUNCATION_PREFIX)
+    assert window.current_output_lines[0].endswith(":newest-error")
+    window.current_output_lines.clear()
+    window.process_line_buffer = ""
+    window.consume_install_text(oversized_output + "\n", final=False)
+    assert len(window.current_output_lines) == 1
+    assert len(window.current_output_lines[0]) == MAX_INSTALL_OUTPUT_LINE_CHARS
+    assert window.current_output_lines[0].startswith(OUTPUT_TRUNCATION_PREFIX)
+    assert window.current_output_lines[0].endswith(":critical-tail")
+    window.current_app = None
+    window.current_output_lines.clear()
+    window.process_line_buffer = ""
     official_source = json.dumps(
         {
             "Arg": OFFICIAL_WINGET_SOURCE_URL,
