@@ -17,7 +17,7 @@ from typing import Optional
 
 
 APP_TITLE = "Mass Installer"
-APP_VERSION = "1.0.4"
+APP_VERSION = "1.0.5"
 APP_DIR = Path(__file__).resolve().parent
 RUNTIME_DIR = APP_DIR / ".runtime"
 LOGS_DIR = RUNTIME_DIR / "logs"
@@ -137,7 +137,7 @@ def private_python_is_usable(
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            timeout=10,
+            timeout=60,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except (OSError, subprocess.SubprocessError):
@@ -171,13 +171,19 @@ def bootstrap_local_python():
     current = os.path.normcase(os.path.realpath(sys.executable))
     if configured_runtime is not None:
         validation_python, local_python, expected_prefix, needs_venv = configured_runtime
-        expected = os.path.normcase(os.path.realpath(local_python))
-        if current == expected and sys.flags.isolated:
+        valid_executables = {
+            os.path.normcase(os.path.realpath(validation_python)),
+            os.path.normcase(os.path.realpath(local_python)),
+        }
+        if current in valid_executables and sys.flags.isolated:
             return
-        if not local_python.is_file() or not private_python_is_usable(
-            validation_python,
-            expected_prefix,
-            needs_venv,
+        if not local_python.is_file() or (
+            current not in valid_executables
+            and not private_python_is_usable(
+                validation_python,
+                expected_prefix,
+                needs_venv,
+            )
         ):
             configured_runtime = None
     if configured_runtime is None and "--self-test" in sys.argv and sys.flags.isolated:
@@ -2276,7 +2282,7 @@ class MassInstaller(QMainWindow):
 
 
 def run_self_test(application: QApplication) -> int:
-    assert APP_VERSION == "1.0.4"
+    assert APP_VERSION == "1.0.5"
     assert acquire_app_mutex()
     assert not acquire_app_mutex()
     release_app_mutex()
