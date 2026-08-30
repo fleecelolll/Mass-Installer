@@ -4,10 +4,13 @@ import ctypes
 import json
 import os
 import re
-import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 import traceback
+import uuid
+import xml.etree.ElementTree as ElementTree
 from collections import deque
 from ctypes import wintypes
 from dataclasses import dataclass
@@ -17,13 +20,14 @@ from typing import Optional
 
 
 APP_TITLE = "Mass Installer"
-APP_VERSION = "1.0.5"
+APP_VERSION = "1.0.6"
 APP_DIR = Path(__file__).resolve().parent
 RUNTIME_DIR = APP_DIR / ".runtime"
 LOGS_DIR = RUNTIME_DIR / "logs"
 ICONS_DIR = APP_DIR / "assets" / "app-icons"
 SETUP_LOCK_DIR = RUNTIME_DIR / "setup.lock"
 SETUP_MARKER = RUNTIME_DIR / "setup-complete.txt"
+TRUSTED_WINGET_PATH = RUNTIME_DIR / "trusted-winget-path.txt"
 VENV_PYTHON = APP_DIR / ".venv" / "Scripts" / "python.exe"
 VENV_PYTHONW = APP_DIR / ".venv" / "Scripts" / "pythonw.exe"
 EMBEDDED_PYTHON = RUNTIME_DIR / "python" / "python.exe"
@@ -41,9 +45,20 @@ APP_MUTEX_NAMES = (
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 MAX_INSTALL_OUTPUT_LINE_CHARS = 8192
 OUTPUT_TRUNCATION_PREFIX = "[earlier output truncated] "
+MAX_INSTALL_LOG_BLOCKS = 1500
+MAX_SESSION_LOG_BYTES = 4 * 1024 * 1024
+MAX_RETAINED_LOG_FILES = 20
+MAX_RETAINED_LOG_BYTES = 32 * 1024 * 1024
+MAX_LOG_AGE_SECONDS = 30 * 24 * 60 * 60
+SESSION_LOG_TRUNCATION_MARKER = "[session log reached its 4 MB limit; later output was omitted]\n"
 APP_MUTEX_HANDLE = None
 ERROR_ACCESS_DENIED = 5
 ERROR_ALREADY_EXISTS = 183
+MICROSOFT_APP_INSTALLER_NAME = "Microsoft.DesktopAppInstaller"
+MICROSOFT_PUBLISHER = (
+    "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, "
+    "S=Washington, C=US"
+)
 
 
 def show_native_setup_error(message: str):
@@ -448,18 +463,122 @@ ICON_SLUG_BY_PACKAGE = {
 ICON_PIXMAP_CACHE = {}
 
 
-def handle_unhandled_exception(error_type, error, trace):
+def managed_log_file(path: Path) -> bool:
+    return path.suffix.lower() == ".log" and path.name.startswith(
+        ("install-", "crash-")
+    )
+
+
+def prune_managed_logs(
+    directory: Path = LOGS_DIR,
+    *,
+    max_files: int = MAX_RETAINED_LOG_FILES,
+    max_total_bytes: int = MAX_RETAINED_LOG_BYTES,
+    max_age_seconds: int = MAX_LOG_AGE_SECONDS,
+    protected=(),
+):
+    if not directory.is_dir():
+        return
+    protected_paths = {
+        os.path.normcase(os.path.abspath(str(Path(path)))) for path in protected
+    }
+    now = datetime.now().timestamp()
+    entries = []
     try:
-        RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-        (RUNTIME_DIR / "error.log").write_text(
-            "".join(traceback.format_exception(error_type, error, trace)),
-            encoding="utf-8",
-        )
+        candidates = list(directory.iterdir())
     except OSError:
+        return
+    for path in candidates:
+        if not managed_log_file(path) or not path.is_file():
+            continue
+        try:
+            details = path.stat()
+        except OSError:
+            continue
+        normalized = os.path.normcase(os.path.abspath(str(path)))
+        if (
+            normalized not in protected_paths
+            and max_age_seconds >= 0
+            and now - details.st_mtime > max_age_seconds
+        ):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            continue
+        entries.append((path, normalized, details.st_mtime, details.st_size))
+
+    entries.sort(key=lambda item: (item[2], item[0].name), reverse=True)
+    retained_count = 0
+    retained_bytes = 0
+    for path, normalized, _modified, size in entries:
+        protected_path = normalized in protected_paths
+        exceeds_limits = (
+            not protected_path
+            and (
+                retained_count >= max(0, max_files)
+                or retained_bytes + size > max(0, max_total_bytes)
+            )
+        )
+        if exceeds_limits:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            continue
+        retained_count += 1
+        retained_bytes += size
+
+
+def bounded_session_log_chunk(text: str, remaining_bytes: int):
+    payload = text.encode("utf-8")
+    if len(payload) <= remaining_bytes:
+        return payload, False
+    if remaining_bytes <= 0:
+        return b"", True
+    marker = SESSION_LOG_TRUNCATION_MARKER.encode("ascii")
+    if remaining_bytes <= len(marker):
+        return marker[:remaining_bytes], True
+    prefix_budget = remaining_bytes - len(marker)
+    prefix = payload[:prefix_budget].decode("utf-8", errors="ignore").encode("utf-8")
+    return prefix + marker, True
+
+
+def write_crash_log(error_type, error, trace, directory: Path = LOGS_DIR) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    now = datetime.now().astimezone()
+    path = directory / f"crash-{now.strftime('%Y%m%d-%H%M%S-%f')}.log"
+    temporary = directory / f".{path.name}.{uuid.uuid4().hex}.tmp"
+    report = (
+        f"{APP_TITLE} {APP_VERSION}\n"
+        f"Time: {now.isoformat(timespec='seconds')}\n\n"
+        + "".join(traceback.format_exception(error_type, error, trace))
+    )
+    try:
+        temporary.write_text(report, encoding="utf-8")
+        os.replace(temporary, path)
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+    prune_managed_logs(directory, protected=(path,))
+    return path
+
+
+def handle_unhandled_exception(error_type, error, trace):
+    crash_path = None
+    try:
+        crash_path = write_crash_log(error_type, error, trace)
+    except Exception:
         pass
+    if crash_path is None:
+        detail = "The crash report could not be saved."
+    else:
+        detail = f"Details were saved to .runtime\\logs\\{crash_path.name}."
     show_native_setup_error(
         "The app stopped because of an unexpected error.\n\n"
-        "Run Installer.bat again. If it continues, review .runtime\\error.log."
+        f"{detail} If the issue continues, run Installer.bat to repair the setup."
     )
     application = QApplication.instance()
     if application is not None:
@@ -1190,13 +1309,18 @@ class MassInstaller(QMainWindow):
         self.total_jobs = 0
         self.completed_jobs = 0
         self.session_log_path: Optional[Path] = None
-        self.winget_path = self.find_winget()
+        self.session_log_bytes = 0
+        self.session_log_truncated = False
+        self.winget_path = (
+            None if "--self-test" in sys.argv else self.find_winget()
+        )
         self.winget_ready = False
         self.winget_version = "checking"
         self.winget_supports_no_progress = False
         self.preflight_process: Optional[QProcess] = None
         self.preflight_stage = ""
         self.preflight_version_candidate = ""
+        self.install_source_recheck_pending = False
         self.page_animation = None
         self.page_animation_overlay = None
 
@@ -1210,6 +1334,9 @@ class MassInstaller(QMainWindow):
         try:
             RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
             LOGS_DIR.mkdir(parents=True, exist_ok=True)
+            if "--self-test" not in sys.argv:
+                prune_managed_logs()
+                (RUNTIME_DIR / "error.log").unlink(missing_ok=True)
         except OSError:
             pass
 
@@ -1220,17 +1347,329 @@ class MassInstaller(QMainWindow):
             QTimer.singleShot(0, self.start_winget_preflight)
 
     @staticmethod
-    def find_winget() -> Optional[Path]:
-        if os.name == "nt":
-            local_data = os.environ.get("LOCALAPPDATA")
-            if not local_data:
+    def _system_powershell() -> Optional[Path]:
+        """Return Windows PowerShell from the real System32 directory."""
+        if os.name != "nt":
+            return None
+        buffer = ctypes.create_unicode_buffer(32768)
+        length = ctypes.windll.kernel32.GetSystemDirectoryW(buffer, len(buffer))
+        if not length or length >= len(buffer):
+            return None
+        powershell = Path(buffer.value) / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+        return powershell if powershell.is_file() else None
+
+    @staticmethod
+    def _program_files_root() -> Optional[Path]:
+        """Resolve Program Files without trusting a caller-controlled environment value."""
+        if os.name != "nt":
+            return None
+        buffer = ctypes.create_unicode_buffer(32768)
+        # CSIDL_PROGRAM_FILES. The app ships only 64-bit runtimes, so this is the
+        # protected package parent used by 64-bit Desktop App Installer.
+        result = ctypes.windll.shell32.SHGetFolderPathW(
+            None, 0x0026, None, 0, buffer
+        )
+        if result != 0 or not buffer.value:
+            return None
+        return Path(buffer.value)
+
+    @staticmethod
+    def _is_reparse(path: Path) -> bool:
+        try:
+            details = path.lstat()
+        except OSError:
+            return True
+        return path.is_symlink() or bool(
+            getattr(details, "st_file_attributes", 0)
+            & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+        )
+
+    @staticmethod
+    def _parse_resolved_winget(raw_output: bytes) -> Optional[Path]:
+        """Accept exactly one absolute, unadorned winget.exe path."""
+        if not raw_output or len(raw_output) > 32768:
+            return None
+        try:
+            output = raw_output.decode("utf-8", errors="strict")
+        except UnicodeDecodeError:
+            return None
+        if (
+            output != output.strip()
+            or any(character in output for character in ("\r", "\n", "\x00"))
+        ):
+            return None
+        candidate = Path(output)
+        if not candidate.is_absolute() or candidate.name.casefold() != "winget.exe":
+            return None
+        return candidate
+
+    @staticmethod
+    def _validate_cached_package_winget(
+        candidate: Path,
+        program_files_root: Optional[Path] = None,
+    ) -> Optional[Path]:
+        """Validate a cached concrete executable entirely inside its AppX package.
+
+        The expensive resolver verifies package status, signature kind, Authenticode,
+        and version metadata before this path is cached. On later launches, the
+        immutable WindowsApps package tree plus these containment and manifest checks
+        provide a safe subprocess-free fast path.
+        """
+        if os.name != "nt" or not candidate.is_absolute():
+            return None
+        program_files = program_files_root or MassInstaller._program_files_root()
+        if program_files is None:
+            return None
+        windows_apps = program_files / "WindowsApps"
+        try:
+            lexical_windows_apps = Path(os.path.abspath(windows_apps))
+            lexical_candidate = Path(os.path.abspath(candidate))
+            relative = lexical_candidate.relative_to(lexical_windows_apps)
+        except (OSError, ValueError):
+            return None
+        if (
+            len(relative.parts) < 2
+            or relative.parts[-1].casefold() != "winget.exe"
+            or not relative.parts[0].casefold().startswith(
+                MICROSOFT_APP_INSTALLER_NAME.casefold() + "_"
+            )
+        ):
+            return None
+
+        package_root = lexical_windows_apps / relative.parts[0]
+        try:
+            canonical_windows_apps = Path(os.path.realpath(lexical_windows_apps))
+            canonical_package_root = Path(os.path.realpath(package_root))
+            canonical_candidate = Path(os.path.realpath(lexical_candidate))
+            if canonical_package_root.parent != canonical_windows_apps:
                 return None
-            candidate = Path(local_data) / "Microsoft" / "WindowsApps" / "winget.exe"
-            return candidate if candidate.is_file() else None
-        located = shutil.which("winget")
-        if located:
-            return Path(located)
-        return None
+            canonical_candidate.relative_to(canonical_package_root)
+        except (OSError, ValueError):
+            return None
+
+        for directory in (canonical_windows_apps, canonical_package_root):
+            if (
+                MassInstaller._is_reparse(directory)
+                or not directory.is_dir()
+            ):
+                return None
+        current = canonical_package_root
+        for part in canonical_candidate.relative_to(canonical_package_root).parts[:-1]:
+            current /= part
+            if MassInstaller._is_reparse(current) or not current.is_dir():
+                return None
+        try:
+            candidate_stat = canonical_candidate.lstat()
+        except OSError:
+            return None
+        if (
+            MassInstaller._is_reparse(canonical_candidate)
+            or not stat.S_ISREG(candidate_stat.st_mode)
+        ):
+            return None
+
+        manifest = canonical_package_root / "AppxManifest.xml"
+        try:
+            manifest_stat = manifest.lstat()
+            if (
+                MassInstaller._is_reparse(manifest)
+                or not stat.S_ISREG(manifest_stat.st_mode)
+                or manifest_stat.st_size > 4 * 1024 * 1024
+            ):
+                return None
+            root = ElementTree.parse(manifest).getroot()
+            identity = next(
+                (
+                    element
+                    for element in root.iter()
+                    if element.tag.rsplit("}", 1)[-1] == "Identity"
+                ),
+                None,
+            )
+        except (OSError, ElementTree.ParseError, ValueError):
+            return None
+        if identity is None or (
+            identity.attrib.get("Name") != MICROSOFT_APP_INSTALLER_NAME
+            or identity.attrib.get("Publisher") != MICROSOFT_PUBLISHER
+        ):
+            return None
+        return canonical_candidate
+
+    @staticmethod
+    def _cached_winget() -> Optional[Path]:
+        try:
+            cache_stat = TRUSTED_WINGET_PATH.lstat()
+            if (
+                MassInstaller._is_reparse(TRUSTED_WINGET_PATH)
+                or not stat.S_ISREG(cache_stat.st_mode)
+                or cache_stat.st_size > 32768
+            ):
+                return None
+            candidate = MassInstaller._parse_resolved_winget(
+                TRUSTED_WINGET_PATH.read_bytes()
+            )
+        except OSError:
+            return None
+        if candidate is None:
+            return None
+        return MassInstaller._validate_cached_package_winget(candidate)
+
+    @staticmethod
+    def _cache_winget(candidate: Path):
+        validated = MassInstaller._validate_cached_package_winget(candidate)
+        if validated is None:
+            return
+        temporary = TRUSTED_WINGET_PATH.with_name(
+            TRUSTED_WINGET_PATH.name + "." + uuid.uuid4().hex + ".new"
+        )
+        try:
+            RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+            if TRUSTED_WINGET_PATH.exists() and MassInstaller._is_reparse(
+                TRUSTED_WINGET_PATH
+            ):
+                return
+            temporary.write_text(str(validated), encoding="utf-8", newline="")
+            os.replace(temporary, TRUSTED_WINGET_PATH)
+        except OSError:
+            pass
+        finally:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    @staticmethod
+    def find_signed_winget() -> Optional[Path]:
+        """Resolve WinGet only from a verified Desktop App Installer package."""
+        powershell = MassInstaller._system_powershell()
+        if powershell is None:
+            return None
+        system32 = powershell.parents[2]
+        windows_root = system32.parent
+        resolver_environment = os.environ.copy()
+        resolver_environment.update(
+            {
+                "SystemRoot": str(windows_root),
+                "WINDIR": str(windows_root),
+                "ComSpec": str(system32 / "cmd.exe"),
+                "PATH": os.pathsep.join((str(system32), str(powershell.parent))),
+                # Do not inherit a PowerShell 7 or user module path into the fixed
+                # Windows PowerShell process. It can shadow or break the built-in
+                # AppX and Authenticode cmdlets used for this trust decision.
+                "PSModulePath": str(
+                    windows_root
+                    / "System32"
+                    / "WindowsPowerShell"
+                    / "v1.0"
+                    / "Modules"
+                ),
+            }
+        )
+        resolver = rf"""
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+$expectedName = '{MICROSOFT_APP_INSTALLER_NAME}'
+$expectedPublisher = '{MICROSOFT_PUBLISHER}'
+$programFiles = [IO.Path]::GetFullPath([Environment]::GetFolderPath('ProgramFiles')).TrimEnd('\')
+$windowsApps = [IO.Path]::GetFullPath((Join-Path $programFiles 'WindowsApps')).TrimEnd('\')
+$programFilesItem = Get-Item -LiteralPath $programFiles -Force
+$windowsAppsItem = Get-Item -LiteralPath $windowsApps -Force
+if (
+    -not $programFilesItem.PSIsContainer -or
+    ($programFilesItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+    -not $windowsAppsItem.PSIsContainer -or
+    ($windowsAppsItem.Attributes -band [IO.FileAttributes]::ReparsePoint)
+) {{ exit 1 }}
+$packages = @(Get-AppxPackage -Name $expectedName -ErrorAction SilentlyContinue |
+    Where-Object {{
+        $_.Name -ceq $expectedName -and
+        $_.Publisher -ceq $expectedPublisher -and
+        [string]$_.Status -ceq 'Ok' -and
+        @('Store', 'System') -ccontains [string]$_.SignatureKind
+    }} | Sort-Object Version -Descending)
+foreach ($package in $packages) {{
+    try {{
+        $packageRoot = [IO.Path]::GetFullPath([string]$package.InstallLocation).TrimEnd('\')
+        if ([IO.Path]::GetDirectoryName($packageRoot) -ine $windowsApps) {{ continue }}
+        $packageItem = Get-Item -LiteralPath $packageRoot -Force
+        if (-not $packageItem.PSIsContainer -or ($packageItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {{ continue }}
+        $manifest = Get-Item -LiteralPath (Join-Path $packageRoot 'AppxManifest.xml') -Force
+        if ($manifest.PSIsContainer -or ($manifest.Attributes -band [IO.FileAttributes]::ReparsePoint)) {{ continue }}
+        [xml]$manifestXml = Get-Content -LiteralPath $manifest.FullName -Raw -Encoding UTF8
+        $identity = $manifestXml.Package.Identity
+        if ($identity.Name -cne $expectedName -or $identity.Publisher -cne $expectedPublisher) {{ continue }}
+
+        $candidate = [IO.Path]::GetFullPath((Join-Path $packageRoot 'winget.exe'))
+        $packagePrefix = $packageRoot + '\'
+        if (-not $candidate.StartsWith($packagePrefix, [StringComparison]::OrdinalIgnoreCase)) {{ continue }}
+        $relativeParent = [IO.Path]::GetDirectoryName($candidate).Substring($packageRoot.Length).TrimStart('\')
+        $current = $packageRoot
+        $safe = $true
+        foreach ($part in @($relativeParent -split '\\' | Where-Object {{ $_ }})) {{
+            $current = Join-Path $current $part
+            $directory = Get-Item -LiteralPath $current -Force
+            if (-not $directory.PSIsContainer -or ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint)) {{ $safe = $false; break }}
+        }}
+        if (-not $safe) {{ continue }}
+        $item = Get-Item -LiteralPath $candidate -Force
+        if (
+            $item.PSIsContainer -or
+            ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+            -not [IO.File]::Exists($item.FullName)
+        ) {{ continue }}
+        $signature = Get-AuthenticodeSignature -LiteralPath $item.FullName
+        $subject = if ($signature.SignerCertificate) {{ [string]$signature.SignerCertificate.Subject }} else {{ '' }}
+        if (
+            [string]$signature.Status -ceq 'Valid' -and
+            $subject -ceq $expectedPublisher -and
+            $item.VersionInfo.CompanyName -ceq 'Microsoft Corporation' -and
+            $item.VersionInfo.OriginalFilename -ceq 'winget.exe'
+        ) {{
+            [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+            [Console]::Out.Write($item.FullName)
+            exit 0
+        }}
+    }} catch {{}}
+}}
+exit 1
+"""
+        try:
+            result = subprocess.run(
+                [
+                    str(powershell),
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                    resolver,
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=12,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                env=resolver_environment,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if result.returncode != 0:
+            return None
+        candidate = MassInstaller._parse_resolved_winget(result.stdout)
+        if candidate is None:
+            return None
+        validated = MassInstaller._validate_cached_package_winget(candidate)
+        if validated is None:
+            return None
+        MassInstaller._cache_winget(validated)
+        return validated
+
+    @staticmethod
+    def find_winget() -> Optional[Path]:
+        if os.name != "nt":
+            return None
+        return MassInstaller._cached_winget() or MassInstaller.find_signed_winget()
 
     def apply_style(self):
         QApplication.instance().setStyleSheet(
@@ -1516,7 +1955,7 @@ class MassInstaller(QMainWindow):
         layout.addLayout(log_header)
         self.install_log = QPlainTextEdit()
         self.install_log.setReadOnly(True)
-        self.install_log.document().setMaximumBlockCount(1500)
+        self.install_log.document().setMaximumBlockCount(MAX_INSTALL_LOG_BLOCKS)
         self.install_log.setPlaceholderText("No activity")
         self.install_log.setMinimumHeight(100)
         self.install_log.setMaximumHeight(120)
@@ -1786,7 +2225,7 @@ class MassInstaller(QMainWindow):
 
     def start_preflight_command(self, arguments: list[str], stage: str):
         if self.preflight_process is not None:
-            return
+            return False
         self.preflight_process = QProcess(self)
         self.preflight_stage = stage
         self.preflight_process.setProcessChannelMode(QProcess.MergedChannels)
@@ -1794,6 +2233,7 @@ class MassInstaller(QMainWindow):
         self.preflight_process.errorOccurred.connect(self.preflight_error)
         self.preflight_process.start(str(self.winget_path), arguments)
         self.preflight_timer.start(10_000)
+        return True
 
     def preflight_finished(self, exit_code, exit_status):
         process = self.preflight_process
@@ -1805,6 +2245,17 @@ class MassInstaller(QMainWindow):
         self.preflight_process = None
         self.preflight_stage = ""
         process.deleteLater()
+        if stage == "install-source":
+            valid_source = (
+                exit_code == 0
+                and bool(output)
+                and self.is_official_winget_source(output)
+            )
+            self.finish_install_source_recheck(
+                valid_source,
+                output or f"exit {exit_code}",
+            )
+            return
         if exit_code != 0 or not output:
             self.finish_winget_preflight(False, output or f"exit {exit_code}")
             return
@@ -1825,24 +2276,32 @@ class MassInstaller(QMainWindow):
         if process is None:
             return
         self.preflight_timer.stop()
+        stage = self.preflight_stage
         self.preflight_process = None
         self.preflight_stage = ""
         if process.state() != QProcess.NotRunning:
             process.kill()
         process.deleteLater()
         detail = "could not start" if error == QProcess.FailedToStart else "preflight failed"
-        self.finish_winget_preflight(False, detail)
+        if stage == "install-source":
+            self.finish_install_source_recheck(False, detail)
+        else:
+            self.finish_winget_preflight(False, detail)
 
     def preflight_timed_out(self):
         process = self.preflight_process
         if process is None:
             return
+        stage = self.preflight_stage
         self.preflight_process = None
         self.preflight_stage = ""
         if process.state() != QProcess.NotRunning:
             process.kill()
         process.deleteLater()
-        self.finish_winget_preflight(False, "preflight timed out")
+        if stage == "install-source":
+            self.finish_install_source_recheck(False, "source check timed out")
+        else:
+            self.finish_winget_preflight(False, "preflight timed out")
 
     @staticmethod
     def is_official_winget_source(output: str) -> bool:
@@ -1886,14 +2345,27 @@ class MassInstaller(QMainWindow):
         if not hasattr(self, "review_status"):
             return
         count = len(self.selected_ids)
-        if self.winget_ready:
+        if self.install_source_recheck_pending:
+            self.review_status.setText(
+                "Checking the local WinGet source again before installation..."
+            )
+        elif self.winget_ready:
             self.review_status.setText(f"Ready to install {count} app{'s' if count != 1 else ''} with WinGet {self.winget_version}.")
         elif self.winget_version == "checking":
             self.review_status.setText("Checking WinGet and its official source...")
         else:
             self.review_status.setText("WinGet is unavailable. Update Microsoft App Installer, then reopen this tool.")
-        self.install_button.setText(f"Install {count} app{'s' if count != 1 else ''}")
-        self.install_button.setEnabled(count > 0 and self.winget_ready and not self.install_active)
+        self.install_button.setText(
+            "Checking official source..."
+            if self.install_source_recheck_pending
+            else f"Install {count} app{'s' if count != 1 else ''}"
+        )
+        self.install_button.setEnabled(
+            count > 0
+            and self.winget_ready
+            and not self.install_active
+            and not self.install_source_recheck_pending
+        )
 
     def build_winget_arguments(self, app_definition: AppDefinition) -> list[str]:
         arguments = [
@@ -1913,10 +2385,46 @@ class MassInstaller(QMainWindow):
         return arguments
 
     def start_installation(self):
-        if self.install_active or not self.selected_ids:
+        if (
+            self.install_active
+            or self.install_source_recheck_pending
+            or not self.selected_ids
+        ):
             return
         if not self.winget_ready or self.winget_path is None:
             QMessageBox.warning(self, "WinGet unavailable", "Mass Installer needs WinGet from Microsoft App Installer. Update App Installer and try again.")
+            return
+        self.install_source_recheck_pending = True
+        self.refresh_review_status()
+        if not self.start_preflight_command(
+            ["source", "export", "winget", "--disable-interactivity"],
+            "install-source",
+        ):
+            self.install_source_recheck_pending = False
+            self.refresh_review_status()
+
+    def finish_install_source_recheck(self, ready: bool, detail: str):
+        if not self.install_source_recheck_pending:
+            return
+        self.install_source_recheck_pending = False
+        if ready:
+            self.begin_installation()
+            return
+        self.winget_ready = False
+        self.preflight_label.setText("Official WinGet source unavailable")
+        self.refresh_review_status()
+        QMessageBox.warning(
+            self,
+            "Official WinGet source unavailable",
+            "Mass Installer stopped before making changes because the local "
+            "WinGet source could not be verified as Microsoft's official source.\n\n"
+            "Reopen the app and try again after WinGet is working normally.\n\n"
+            f"Check result: {bounded_install_output_line(detail)}",
+        )
+
+    def begin_installation(self):
+        if self.install_active or not self.selected_ids:
+            self.refresh_review_status()
             return
         self.install_queue = deque(self.ordered_selection())
         self.total_jobs = len(self.install_queue)
@@ -1936,14 +2444,23 @@ class MassInstaller(QMainWindow):
         self.overall_progress.setValue(0)
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
         self.session_log_path = LOGS_DIR / f"install-{timestamp}.log"
+        self.session_log_bytes = 0
+        self.session_log_truncated = False
         try:
             LOGS_DIR.mkdir(parents=True, exist_ok=True)
-            self.session_log_path.write_text(
-                f"Fleece Mass Installer session\nStarted: {datetime.now().isoformat(timespec='seconds')}\nPackages: {self.total_jobs}\n\n",
-                encoding="utf-8",
-            )
+            prune_managed_logs()
+            header = (
+                f"Fleece Mass Installer {APP_VERSION} session\n"
+                f"Started: {datetime.now().astimezone().isoformat(timespec='seconds')}\n"
+                f"Packages: {self.total_jobs}\n\n"
+            ).encode("utf-8")
+            self.session_log_path.write_bytes(header)
+            self.session_log_bytes = len(header)
+            prune_managed_logs(protected=(self.session_log_path,))
         except OSError:
             self.session_log_path = None
+            self.session_log_bytes = 0
+            self.session_log_truncated = False
         self.populate_install_queue()
         self.set_page(self.INSTALL_PAGE)
         self.append_install_log(f"Starting {self.total_jobs} selected apps.")
@@ -2076,8 +2593,7 @@ class MassInstaller(QMainWindow):
 
     @staticmethod
     def failure_label(exit_code: int, output: str) -> str:
-        if "cancel" in output or "declined" in output:
-            return "Permission declined"
+        output = output.casefold()
         if "another installation is already in progress" in output:
             return "Another installer is busy"
         if "no applicable installer" in output:
@@ -2085,6 +2601,45 @@ class MassInstaller(QMainWindow):
         if "blocked by policy" in output:
             return "Blocked by Windows policy"
         unsigned = exit_code & 0xFFFFFFFF
+        if any(
+            phrase in output
+            for phrase in (
+                "package agreement was not accepted",
+                "package agreements were not accepted",
+                "source agreement was not accepted",
+                "source agreements were not accepted",
+            )
+        ):
+            return "Agreement not accepted"
+        if any(
+            phrase in output
+            for phrase in (
+                "elevation was canceled",
+                "elevation was cancelled",
+                "elevation request was declined",
+                "permission request was declined",
+                "uac prompt was declined",
+            )
+        ):
+            return "Permission declined"
+        if unsigned in {1223, 1602, 0x800704C7, 0x80070642} or any(
+            phrase in output
+            for phrase in (
+                "canceled by the user",
+                "cancelled by the user",
+                "user canceled",
+                "user cancelled",
+            )
+        ):
+            return "Cancelled by user"
+        if ("download" in output or "network" in output) and any(
+            phrase in output for phrase in ("cancel", "failed", "failure", "error")
+        ):
+            return "Download failed"
+        if "canceled" in output or "cancelled" in output:
+            return "Cancelled"
+        if "declined" in output:
+            return "Request declined"
         return f"Failed · 0x{unsigned:08X}"
 
     def complete_current(self, state: str, label: str):
@@ -2235,12 +2790,19 @@ class MassInstaller(QMainWindow):
         lines = [f"[{timestamp}] {message}" for message in cleaned_messages]
         text = "\n".join(lines)
         self.install_log.appendPlainText(text)
-        if self.session_log_path is not None:
+        if self.session_log_path is not None and not self.session_log_truncated:
             try:
-                with self.session_log_path.open("a", encoding="utf-8") as handle:
-                    handle.write(text + "\n")
+                remaining = max(0, MAX_SESSION_LOG_BYTES - self.session_log_bytes)
+                chunk, truncated = bounded_session_log_chunk(text + "\n", remaining)
+                if chunk:
+                    with self.session_log_path.open("ab") as handle:
+                        handle.write(chunk)
+                    self.session_log_bytes += len(chunk)
+                self.session_log_truncated = truncated
             except OSError:
                 self.session_log_path = None
+                self.session_log_bytes = 0
+                self.session_log_truncated = False
 
     def open_session_log(self):
         if self.session_log_path is not None and self.session_log_path.is_file():
@@ -2266,6 +2828,18 @@ class MassInstaller(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent):
         self.category_filter.hide_popup()
+        if self.install_source_recheck_pending:
+            self.install_source_recheck_pending = False
+            self.preflight_timer.stop()
+            process = self.preflight_process
+            self.preflight_process = None
+            self.preflight_stage = ""
+            if process is not None:
+                if process.state() != QProcess.NotRunning:
+                    process.kill()
+                process.deleteLater()
+            event.accept()
+            return
         if self.install_active:
             QMessageBox.information(
                 self,
@@ -2282,12 +2856,256 @@ class MassInstaller(QMainWindow):
 
 
 def run_self_test(application: QApplication) -> int:
-    assert APP_VERSION == "1.0.5"
+    assert APP_VERSION == "1.0.6"
     assert acquire_app_mutex()
     assert not acquire_app_mutex()
     release_app_mutex()
     assert APP_MUTEX_HANDLE is None
     window = MassInstaller()
+    # Self-test mode deliberately skips real package discovery and paid startup
+    # work, but later UI workflow tests still require a non-empty executable.
+    window.winget_path = Path(sys.executable)
+    assert (
+        window.install_log.document().maximumBlockCount()
+        == MAX_INSTALL_LOG_BLOCKS
+    )
+
+    with tempfile.TemporaryDirectory(prefix="mass-installer-safety-") as temporary:
+        temporary_path = Path(temporary)
+        fake_program_files = temporary_path / "Program Files"
+        fake_windows_apps = fake_program_files / "WindowsApps"
+        fake_package = (
+            fake_windows_apps
+            / "Microsoft.DesktopAppInstaller_1.2.3.4_x64__8wekyb3d8bbwe"
+        )
+        fake_package.mkdir(parents=True)
+        fake_winget = fake_package / "winget.exe"
+        fake_winget.write_bytes(b"mock package executable")
+        (fake_package / "AppxManifest.xml").write_text(
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10">'
+            f'<Identity Name="{MICROSOFT_APP_INSTALLER_NAME}" '
+            f'Publisher="{MICROSOFT_PUBLISHER}" Version="1.2.3.4" />'
+            "</Package>",
+            encoding="utf-8",
+        )
+        assert (
+            MassInstaller._validate_cached_package_winget(
+                fake_winget, fake_program_files
+            )
+            == fake_winget.resolve()
+        )
+        assert MassInstaller._parse_resolved_winget(
+            str(fake_winget).encode("utf-8")
+        ) == fake_winget
+        for malformed_output in (
+            b"",
+            b"winget.exe",
+            str(fake_winget).encode("utf-8") + b"\n",
+            str(fake_winget).encode("utf-8") + b"\r\nsecond line",
+            str(fake_winget).encode("utf-8") + b"\x00suffix",
+            b"\xff",
+        ):
+            assert MassInstaller._parse_resolved_winget(malformed_output) is None
+
+        outside_winget = temporary_path / "winget.exe"
+        outside_winget.write_bytes(b"not in a protected package")
+        assert (
+            MassInstaller._validate_cached_package_winget(
+                outside_winget, fake_program_files
+            )
+            is None
+        )
+        nested_package = fake_windows_apps / "untrusted" / fake_package.name
+        nested_package.mkdir(parents=True)
+        nested_winget = nested_package / "winget.exe"
+        nested_winget.write_bytes(b"nested fake")
+        (nested_package / "AppxManifest.xml").write_bytes(
+            (fake_package / "AppxManifest.xml").read_bytes()
+        )
+        assert (
+            MassInstaller._validate_cached_package_winget(
+                nested_winget, fake_program_files
+            )
+            is None
+        )
+        wrong_package = (
+            fake_windows_apps
+            / "Microsoft.DesktopAppInstaller_9.9.9.9_x64__attacker"
+        )
+        wrong_package.mkdir()
+        wrong_winget = wrong_package / "winget.exe"
+        wrong_winget.write_bytes(b"wrong publisher")
+        (wrong_package / "AppxManifest.xml").write_text(
+            '<Package><Identity Name="Microsoft.DesktopAppInstaller" '
+            'Publisher="CN=Not Microsoft" /></Package>',
+            encoding="utf-8",
+        )
+        assert (
+            MassInstaller._validate_cached_package_winget(
+                wrong_winget, fake_program_files
+            )
+            is None
+        )
+
+        original_trusted_path = globals()["TRUSTED_WINGET_PATH"]
+        original_program_files = MassInstaller._program_files_root
+        cache_path = temporary_path / "trusted-winget-path.txt"
+        globals()["TRUSTED_WINGET_PATH"] = cache_path
+        MassInstaller._program_files_root = staticmethod(lambda: fake_program_files)
+        try:
+            cache_path.write_text(str(fake_winget), encoding="utf-8", newline="")
+            assert MassInstaller._cached_winget() == fake_winget.resolve()
+            cache_path.write_text(
+                str(fake_winget) + "\n" + str(outside_winget),
+                encoding="utf-8",
+                newline="",
+            )
+            assert MassInstaller._cached_winget() is None
+            cache_path.write_text(str(outside_winget), encoding="utf-8", newline="")
+            assert MassInstaller._cached_winget() is None
+        finally:
+            globals()["TRUSTED_WINGET_PATH"] = original_trusted_path
+            MassInstaller._program_files_root = original_program_files
+
+        original_run = subprocess.run
+        original_system_powershell = MassInstaller._system_powershell
+        original_validate_winget = MassInstaller._validate_cached_package_winget
+        original_cache_winget = MassInstaller._cache_winget
+        resolver_commands = []
+        resolver_options = []
+
+        def fake_resolver(command, **kwargs):
+            resolver_commands.append(command)
+            resolver_options.append(kwargs)
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=str(fake_winget).encode("utf-8"),
+            )
+
+        try:
+            MassInstaller._system_powershell = staticmethod(
+                lambda: temporary_path
+                / "System32"
+                / "WindowsPowerShell"
+                / "v1.0"
+                / "powershell.exe"
+            )
+            MassInstaller._validate_cached_package_winget = staticmethod(
+                lambda candidate, program_files_root=None: (
+                    candidate if candidate == fake_winget else None
+                )
+            )
+            MassInstaller._cache_winget = staticmethod(lambda candidate: None)
+            subprocess.run = fake_resolver
+            assert MassInstaller.find_signed_winget() == fake_winget
+            assert resolver_commands and resolver_options
+            resolver_source = resolver_commands[-1][-1]
+            resolver_environment = resolver_options[-1]["env"]
+            expected_system32 = temporary_path / "System32"
+            assert resolver_environment["PATH"] == os.pathsep.join(
+                (
+                    str(expected_system32),
+                    str(
+                        expected_system32
+                        / "WindowsPowerShell"
+                        / "v1.0"
+                        / "powershell.exe"
+                    ).rsplit(os.sep, 1)[0],
+                )
+            )
+            assert resolver_environment["PSModulePath"] == str(
+                temporary_path
+                / "System32"
+                / "WindowsPowerShell"
+                / "v1.0"
+                / "Modules"
+            )
+            assert "Get-AppxPackage -Name $expectedName" in resolver_source
+            assert "Get-AuthenticodeSignature" in resolver_source
+            assert "Microsoft.DesktopAppInstaller" in resolver_source
+            assert MICROSOFT_PUBLISHER in resolver_source
+            assert "SignatureKind" in resolver_source
+            assert "[string]$_.Status -ceq 'Ok'" in resolver_source
+            assert "[IO.FileAttributes]::ReparsePoint" in resolver_source
+            assert "OriginalFilename -ceq 'winget.exe'" in resolver_source
+            assert "CompanyName -ceq 'Microsoft Corporation'" in resolver_source
+            assert "Get-Command" not in resolver_source
+            subprocess.run = lambda command, **kwargs: subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=(str(fake_winget) + "\nsecond line").encode("utf-8"),
+            )
+            assert MassInstaller.find_signed_winget() is None
+            subprocess.run = lambda command, **kwargs: subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=str(outside_winget).encode("utf-8"),
+            )
+            assert MassInstaller.find_signed_winget() is None
+        finally:
+            subprocess.run = original_run
+            MassInstaller._system_powershell = original_system_powershell
+            MassInstaller._validate_cached_package_winget = original_validate_winget
+            MassInstaller._cache_winget = original_cache_winget
+
+        try:
+            raise RuntimeError("mock crash detail")
+        except RuntimeError:
+            error_type, error, trace = sys.exc_info()
+        crash_directory = temporary_path / "crashes"
+        crash_path = write_crash_log(error_type, error, trace, crash_directory)
+        crash_text = crash_path.read_text(encoding="utf-8")
+        assert f"{APP_TITLE} {APP_VERSION}" in crash_text
+        assert "Time:" in crash_text
+        assert "RuntimeError: mock crash detail" in crash_text
+
+        chunk, truncated = bounded_session_log_chunk("é" * 200, 128)
+        assert truncated and len(chunk) <= 128
+        assert SESSION_LOG_TRUNCATION_MARKER.strip().encode("ascii") in chunk
+        chunk.decode("utf-8")
+
+        retention_directory = temporary_path / "retention"
+        retention_directory.mkdir()
+        now = datetime.now().timestamp()
+        for index in range(4):
+            log_path = retention_directory / f"install-{index}.log"
+            log_path.write_bytes(b"x" * 16)
+            modified = now - index
+            os.utime(log_path, (modified, modified))
+        unrelated = retention_directory / "keep-me.txt"
+        unrelated.write_text("not managed", encoding="utf-8")
+        prune_managed_logs(
+            retention_directory,
+            max_files=2,
+            max_total_bytes=1_000,
+            max_age_seconds=1_000,
+        )
+        retained = sorted(path.name for path in retention_directory.glob("*.log"))
+        assert retained == ["install-0.log", "install-1.log"]
+        assert unrelated.is_file()
+
+        original_log_limit = globals()["MAX_SESSION_LOG_BYTES"]
+        globals()["MAX_SESSION_LOG_BYTES"] = 160
+        try:
+            window.session_log_path = temporary_path / "install-live.log"
+            window.session_log_path.write_bytes(b"")
+            window.session_log_bytes = 0
+            window.session_log_truncated = False
+            window.append_install_log("é" * 500)
+            first_size = window.session_log_path.stat().st_size
+            assert first_size <= 160 and window.session_log_truncated
+            assert SESSION_LOG_TRUNCATION_MARKER.strip() in window.session_log_path.read_text(
+                encoding="utf-8"
+            )
+            window.append_install_log("later output must stay out of the disk log")
+            assert window.session_log_path.stat().st_size == first_size
+        finally:
+            globals()["MAX_SESSION_LOG_BYTES"] = original_log_limit
+            window.session_log_path = None
+            window.session_log_bytes = 0
+            window.session_log_truncated = False
     assert private_python_is_usable(
         Path(sys.executable),
         Path(sys.prefix),
@@ -2414,14 +3232,77 @@ def run_self_test(application: QApplication) -> int:
         "installed",
         "Installed · restart may be needed",
     )
-    assert window.classify_install_result(5, "Operation cancelled")[0] == "failed"
+    assert window.classify_install_result(5, "Operation cancelled") == (
+        "failed",
+        "Cancelled",
+    )
+    assert (
+        window.failure_label(5, "download cancelled after network failure")
+        == "Download failed"
+    )
+    assert (
+        window.failure_label(5, "The elevation request was declined")
+        == "Permission declined"
+    )
+    assert window.failure_label(1223, "") == "Cancelled by user"
+
+    source_recheck_calls = []
+    installation_begins = []
+    original_start_preflight = window.start_preflight_command
+    original_begin_installation = window.begin_installation
+
+    def capture_source_recheck(arguments, stage):
+        source_recheck_calls.append((list(arguments), stage))
+        return True
+
+    window.start_preflight_command = capture_source_recheck
+    window.begin_installation = lambda: installation_begins.append(True)
+    try:
+        window.start_installation()
+        assert window.install_source_recheck_pending
+        assert source_recheck_calls == [
+            (
+                ["source", "export", "winget", "--disable-interactivity"],
+                "install-source",
+            )
+        ]
+        assert not installation_begins
+        window.finish_install_source_recheck(True, official_source)
+        assert not window.install_source_recheck_pending
+        assert installation_begins == [True]
+    finally:
+        window.start_preflight_command = original_start_preflight
+        window.begin_installation = original_begin_installation
+
+    source_check_cleanup = []
+
+    class PendingSourceProcess:
+        def state(self):
+            return QProcess.Running
+
+        def kill(self):
+            source_check_cleanup.append("kill")
+
+        def deleteLater(self):
+            source_check_cleanup.append("delete")
+
+    window.install_source_recheck_pending = True
+    window.preflight_stage = "install-source"
+    window.preflight_process = PendingSourceProcess()
+    close_event = QCloseEvent()
+    window.closeEvent(close_event)
+    assert close_event.isAccepted()
+    assert not window.install_source_recheck_pending
+    assert window.preflight_process is None and window.preflight_stage == ""
+    assert source_check_cleanup == ["kill", "delete"]
     window.show_review()
     assert window.stack.currentIndex() == MassInstaller.REVIEW_PAGE
     window.close()
     application.processEvents()
     print(
-        "Mass Installer self-test passed: catalog, icons, filters, profiles, official source, "
-        "selection, review, result classification, and safe command construction."
+        "Mass Installer self-test passed: trusted AppX WinGet resolution, malicious-path "
+        "rejection, catalog, icons, filters, profiles, official-source recheck, bounded "
+        "logs, selection, review, result classification, and safe command construction."
     )
     return 0
 

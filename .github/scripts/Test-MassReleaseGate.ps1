@@ -1,0 +1,149 @@
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+Set-StrictMode -Version 3
+
+$root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')).TrimEnd('\')
+$installer = Join-Path $root 'Installer.bat'
+$app = Join-Path $root 'Mass Installer.pyw'
+$runtime = Join-Path $root '.runtime'
+$python = Join-Path $runtime 'python\python.exe'
+$pythonw = Join-Path $runtime 'python\pythonw.exe'
+$pipWheel = Join-Path $runtime 'python\pip.whl'
+$sitePackages = Join-Path $runtime 'python\Lib\site-packages'
+$cache = Join-Path $runtime 'trusted-winget-path.txt'
+$marker = Join-Path $runtime 'setup-complete.txt'
+$lock = Join-Path $runtime 'setup.lock'
+$shortcut = Join-Path $root 'Mass Installer.lnk'
+$log = Join-Path $root 'setup.log'
+$cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+
+function Require-NormalDirectory([string]$Path, [string]$Label) {
+    $item = Get-Item -LiteralPath $Path -Force
+    if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "$Label is not a normal directory: $Path"
+    }
+    $item
+}
+
+function Require-NormalFile([string]$Path, [string]$Label, [long]$MaximumLength = 32MB) {
+    $item = Get-Item -LiteralPath $Path -Force
+    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or -not [IO.File]::Exists($item.FullName) -or $item.Length -gt $MaximumLength) {
+        throw "$Label is not a normal bounded file: $Path"
+    }
+    $item
+}
+
+function Invoke-Setup {
+    $commandLine = 'call "{0}" --yes --no-pause --skip-association' -f $installer
+    & $cmd /d /c $commandLine | ForEach-Object { Write-Host $_ }
+    return $LASTEXITCODE
+}
+
+function Read-SetupOutcome {
+    $text = [IO.File]::ReadAllText($log, [Text.Encoding]::UTF8)
+    $resolverMatches = [regex]::Matches($text, '(?m)^FLEECE_WINGET_STATE=(trusted|exact-package-absent|present-invalid)\r?$')
+    if ($resolverMatches.Count -ne 1) {
+        throw "Expected exactly one raw resolver state in setup.log; found $($resolverMatches.Count)."
+    }
+    $outcomeMatches = [regex]::Matches($text, '(?m)^\[[^\r\n]+\] FLEECE_SETUP_WINGET_OUTCOME=(trusted|exact-package-absent|present-invalid|resolver-error)\r?$')
+    if ($outcomeMatches.Count -ne 1) {
+        throw "Expected exactly one setup WinGet outcome in setup.log; found $($outcomeMatches.Count)."
+    }
+    $resolverState = $resolverMatches[0].Groups[1].Value
+    $setupState = $outcomeMatches[0].Groups[1].Value
+    if ($resolverState -cne $setupState) {
+        throw "Resolver state '$resolverState' did not match setup state '$setupState'."
+    }
+    [pscustomobject]@{ State = $resolverState; Text = $text }
+}
+
+function Assert-PrivateRuntime {
+    [void](Require-NormalDirectory $runtime 'Private runtime')
+    [void](Require-NormalDirectory $sitePackages 'Private site-packages')
+    [void](Require-NormalFile $python 'Private python.exe')
+    [void](Require-NormalFile $pythonw 'Private pythonw.exe')
+    [void](Require-NormalFile $pipWheel 'Private pip wheel')
+    & $python -I -c "import sys, struct, PySide6; ok = sys.version_info[:3] == (3, 14, 7) and struct.calcsize('P') == 8 and PySide6.__version__ == '6.11.2'; raise SystemExit(0 if ok else 1)"
+    if ($LASTEXITCODE -ne 0) { throw 'The private Python/PySide6 version contract failed.' }
+    & $python -I $app --self-test
+    if ($LASTEXITCODE -ne 0) { throw 'The direct isolated app self-test failed.' }
+}
+
+function Assert-TrustedCache {
+    $expected = Join-Path $runtime 'trusted-winget-path.txt'
+    if ([IO.Path]::GetFullPath($cache) -cne [IO.Path]::GetFullPath($expected)) {
+        throw 'The trusted WinGet cache does not use its fixed runtime filename.'
+    }
+    $item = Require-NormalFile $cache 'Trusted WinGet cache' 32768
+    if ($item.Length -lt 1) { throw 'The trusted WinGet cache is empty.' }
+    $bytes = [IO.File]::ReadAllBytes($item.FullName)
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        throw 'The trusted WinGet cache contains a UTF-8 BOM.'
+    }
+    $text = [Text.UTF8Encoding]::new($false, $true).GetString($bytes)
+    if ($text.IndexOfAny([char[]]@("`r", "`n", "`0")) -ge 0 -or [string]::IsNullOrWhiteSpace($text)) {
+        throw 'The trusted WinGet cache must contain one path without a terminator.'
+    }
+    $target = [IO.Path]::GetFullPath($text)
+    if ($target -cne $text -or [IO.Path]::GetFileName($target) -cne 'winget.exe') {
+        throw 'The trusted WinGet cache does not contain one exact absolute winget.exe path.'
+    }
+    [void](Require-NormalFile $target 'Trusted cached WinGet executable')
+}
+
+foreach ($path in @($marker, $shortcut, $cache, $lock)) {
+    if (Test-Path -LiteralPath $path) {
+        throw "The clean release gate started with stale private setup state: $path"
+    }
+}
+
+$firstCode = Invoke-Setup
+if (-not (Test-Path -LiteralPath $log -PathType Leaf)) {
+    throw 'Installer.bat did not produce setup.log.'
+}
+$first = Read-SetupOutcome
+
+switch ($first.State) {
+    'trusted' {
+        if ($firstCode -ne 0) { throw "Trusted WinGet setup failed with exit code $firstCode." }
+        if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) { throw 'Trusted setup did not publish the setup marker.' }
+        if (-not (Test-Path -LiteralPath $shortcut -PathType Leaf)) { throw 'Trusted setup did not publish the app shortcut.' }
+        if ($first.Text -notmatch '(?m)^\[[^\r\n]+\] Setup completed successfully\.\r?$') { throw 'Trusted setup did not log successful completion.' }
+        Assert-TrustedCache
+        Assert-PrivateRuntime
+
+        $repairCode = Invoke-Setup
+        if ($repairCode -ne 0) { throw "Trusted WinGet repair failed with exit code $repairCode." }
+        $repair = Read-SetupOutcome
+        if ($repair.State -cne 'trusted') { throw "Repair changed the WinGet outcome to '$($repair.State)'." }
+        if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) { throw 'Repair lost the setup marker.' }
+        if (-not (Test-Path -LiteralPath $shortcut -PathType Leaf)) { throw 'Repair lost the app shortcut.' }
+        Assert-TrustedCache
+        Assert-PrivateRuntime
+    }
+    'exact-package-absent' {
+        if ($firstCode -eq 0) { throw 'Setup reported success even though the exact Desktop App Installer package was absent.' }
+        if ($firstCode -ne 1) { throw "Expected the setup failure wrapper to return 1 for exact package absence; got $firstCode." }
+        $expectedError = 'Microsoft Desktop App Installer is not registered for this Windows user\. Install or update App Installer from Microsoft, then run this setup again\.'
+        $errors = [regex]::Matches($first.Text, '(?m)^\[[^\r\n]+\] ERROR: .+\r?$')
+        if ($errors.Count -ne 1 -or $errors[0].Value -notmatch $expectedError) {
+            throw 'Exact package absence did not fail only at the expected WinGet gate.'
+        }
+        if ($first.Text -match '(?m)^\[[^\r\n]+\] Setup completed successfully\.\r?$') { throw 'Absent-package setup falsely logged success.' }
+        foreach ($path in @($marker, $shortcut, $cache, $lock)) {
+            if (Test-Path -LiteralPath $path) { throw "Absent-package setup published forbidden success state: $path" }
+        }
+        Assert-PrivateRuntime
+    }
+    'present-invalid' {
+        throw 'Desktop App Installer is present but failed the trusted WinGet contract; this runner is not an expected unavailable-server case.'
+    }
+    default {
+        throw "Unexpected WinGet state '$($first.State)'."
+    }
+}
+
+if ($env:GITHUB_OUTPUT) {
+    [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "winget_state=$($first.State)`n", [Text.UTF8Encoding]::new($false))
+}
+Write-Host "Mass release gate passed with WinGet state: $($first.State)"
