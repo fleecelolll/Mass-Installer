@@ -14,7 +14,7 @@ A little tool I made with AI to quickly install or update useful Windows apps to
 - Search for apps and select as many as needed
 - Install or update selected apps in one clear queue
 - See waiting, installing, installed, current, failed, and cancelled results
-- Use exact reviewed WinGet package IDs instead of free-form searches
+- Use exact, selected WinGet package IDs instead of free-form searches
 - Keep app icons bundled locally
 - Never reset or rewrite WinGet sources
 - Never restart Windows automatically
@@ -31,7 +31,7 @@ A little tool I made with AI to quickly install or update useful Windows apps to
 1. Download the latest release ZIP.
 2. Extract the complete folder.
 3. Double-click `Installer.bat`.
-4. Press **Y** once to approve setup.
+4. Press **Y** once to accept the Terms and bundled Tool License and approve setup.
 5. Leave the setup window open until every check passes.
 6. Double-click the `Mass Installer` shortcut created in the folder.
 
@@ -51,7 +51,7 @@ Run `Installer.bat` again to repair the private components or after moving the c
 4. Choose **Install**.
 5. Leave Mass Installer open while the queue finishes.
 
-WinGet uses reviewed package manifests and publisher download locations. A publisher installer can still request administrator approval, show its own window, require a license, or request a restart.
+Mass Installer uses selected package IDs from its catalog. WinGet resolves those IDs through the verified Microsoft community source and follows the publisher download locations defined there. A publisher installer can still request administrator approval, show its own window, require a license, or request a restart.
 
 ## built with
 
@@ -73,9 +73,9 @@ If the `Mass Installer` shortcut does not open, run `Installer.bat` again and ke
 
 If WinGet validation fails, install or update **App Installer** from Microsoft to WinGet 1.29 or newer and run setup again. Setup does not reset or rewrite WinGet sources.
 
-## source use
+## license
 
-The source is public for transparency and security review. Copyright 2026 Fleece. All rights reserved. No permission is granted to use, copy, modify, redistribute, sell, or publish derivative versions. See [LICENSE](LICENSE).
+Copyright 2026 Fleece. This project is source-available, not open source. The bundled [LICENSE](LICENSE) permits downloading, installing, and running an unmodified official release for lawful personal, non-commercial use. Modification, redistribution, sale, rebranding, and derivative versions remain prohibited. Third-party materials retain their own licenses, as listed in [assets/THIRD_PARTY_NOTICES.md](assets/THIRD_PARTY_NOTICES.md).
 
 ## note
 
