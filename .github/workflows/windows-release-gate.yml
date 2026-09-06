@@ -38,6 +38,8 @@ jobs:
       - name: Run the native setup release gate
         id: native-setup
         shell: powershell
+        env:
+          FLEECE_ALLOW_TRUSTED_OLD_WINGET: ${{ matrix.runner == 'windows-2025' && '1' || '0' }}
         run: '& ".github/scripts/Test-MassReleaseGate.ps1"'
 
       - name: Upload diagnostics if a gate fails

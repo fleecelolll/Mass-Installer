@@ -45,11 +45,11 @@ function Invoke-Setup([switch]$ConfirmInteractively) {
 
 function Read-SetupOutcome {
     $text = [IO.File]::ReadAllText($log, [Text.Encoding]::UTF8)
-    $resolverMatches = [regex]::Matches($text, '(?m)^FLEECE_WINGET_STATE=(trusted|exact-package-absent|present-invalid)\r?$')
+    $resolverMatches = [regex]::Matches($text, '(?m)^FLEECE_WINGET_STATE=(trusted|exact-package-absent|present-invalid|unsupported-version)\r?$')
     if ($resolverMatches.Count -ne 1) {
         throw "Expected exactly one raw resolver state in setup.log; found $($resolverMatches.Count)."
     }
-    $outcomeMatches = [regex]::Matches($text, '(?m)^\[[^\r\n]+\] FLEECE_SETUP_WINGET_OUTCOME=(trusted|exact-package-absent|present-invalid|resolver-error)\r?$')
+    $outcomeMatches = [regex]::Matches($text, '(?m)^\[[^\r\n]+\] FLEECE_SETUP_WINGET_OUTCOME=(trusted|exact-package-absent|present-invalid|unsupported-version|resolver-error)\r?$')
     if ($outcomeMatches.Count -ne 1) {
         throw "Expected exactly one setup WinGet outcome in setup.log; found $($outcomeMatches.Count)."
     }
@@ -141,6 +141,29 @@ switch ($first.State) {
     }
     'present-invalid' {
         throw 'Desktop App Installer is present but failed the trusted WinGet contract; this runner is not an expected unavailable-server case.'
+    }
+    'unsupported-version' {
+        if ($env:FLEECE_ALLOW_TRUSTED_OLD_WINGET -cne '1') {
+            throw 'A trusted but unsupported WinGet is allowed only on the explicitly identified Windows Server 2025 runner.'
+        }
+        if ($firstCode -eq 0) { throw 'Setup reported success with a WinGet version below the supported minimum.' }
+        if ($firstCode -ne 1) { throw "Expected the setup failure wrapper to return 1 for unsupported WinGet; got $firstCode." }
+        $expectedWarning = 'WARNING: Validated Microsoft WinGet (?<Version>v?\d+\.\d+(?:\.\d+){0,2}) and its official source, but this version is older than 1\.29\.'
+        $warnings = [regex]::Matches($first.Text, "(?m)^$expectedWarning\r?$")
+        if ($warnings.Count -ne 1) {
+            throw 'Unsupported WinGet was not independently classified after package, signature, and official-source validation.'
+        }
+        Write-Host "Runner provides trusted but unsupported WinGet $($warnings[0].Groups['Version'].Value)."
+        $expectedError = 'Microsoft Desktop App Installer is trusted, but its WinGet version is older than 1\.29\. Update App Installer from Microsoft, then run this setup again\.'
+        $errors = [regex]::Matches($first.Text, '(?m)^\[[^\r\n]+\] ERROR: .+\r?$')
+        if ($errors.Count -ne 1 -or $errors[0].Value -notmatch $expectedError) {
+            throw 'Unsupported WinGet did not fail only at the expected minimum-version gate.'
+        }
+        if ($first.Text -match '(?m)^\[[^\r\n]+\] Setup completed successfully\.\r?$') { throw 'Unsupported WinGet setup falsely logged success.' }
+        foreach ($path in @($marker, $shortcut, $cache, $lock)) {
+            if (Test-Path -LiteralPath $path) { throw "Unsupported WinGet setup published forbidden success state: $path" }
+        }
+        Assert-PrivateRuntime
     }
     default {
         throw "Unexpected WinGet state '$($first.State)'."
