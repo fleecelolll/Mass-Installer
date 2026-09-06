@@ -33,8 +33,12 @@ function Require-NormalFile([string]$Path, [string]$Label, [long]$MaximumLength 
     $item
 }
 
-function Invoke-Setup {
-    $commandLine = 'call "{0}" --yes --no-pause --skip-association' -f $installer
+function Invoke-Setup([switch]$ConfirmInteractively) {
+    $commandLine = if ($ConfirmInteractively) {
+        '(echo Y)| call "{0}" --no-pause' -f $installer
+    } else {
+        'call "{0}" --yes --no-pause' -f $installer
+    }
     & $cmd /d /c $commandLine | ForEach-Object { Write-Host $_ }
     return $LASTEXITCODE
 }
@@ -97,7 +101,7 @@ foreach ($path in @($marker, $shortcut, $cache, $lock)) {
     }
 }
 
-$firstCode = Invoke-Setup
+$firstCode = Invoke-Setup -ConfirmInteractively
 if (-not (Test-Path -LiteralPath $log -PathType Leaf)) {
     throw 'Installer.bat did not produce setup.log.'
 }
