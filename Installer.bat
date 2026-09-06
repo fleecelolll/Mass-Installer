@@ -78,22 +78,19 @@ set "TRUSTED_WINGET_PATH=%RUNTIME%\trusted-winget-path.txt"
 set "WINGET_RESOLVER=%RUNTIME%\Validate-TrustedWinget.ps1"
 set "WINGET_STATE=not-checked"
 set "VENV=%ROOT%.venv"
-set "VENV_PY=%VENV%\Scripts\python.exe"
-set "VENV_PYW=%VENV%\Scripts\pythonw.exe"
 set "POWERSHELL_EXE=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 set "CURL_EXE=%SystemRoot%\System32\curl.exe"
 set "ROBOCOPY_EXE=%SystemRoot%\System32\robocopy.exe"
 set "PYTHON_VERSION=3.14.7"
 set "PYSIDE_VERSION=6.11.2"
 set "PYSIDE_DISTRIBUTION=PySide6-Essentials"
-set "PIP_VERSION=26.2.1"
 set "PYPI_INDEX=https://pypi.org/simple"
 set "PIP_WHEEL_URL=https://files.pythonhosted.org/packages/f3/6e/1736e5b4ae2b778ef2f81c47d797de9f891d4d8acb047a24ca37a60294dd/pip-26.2.1-py3-none-any.whl"
 set "PIP_WHEEL_SHA256=71138ADF1F4CA900CDB7D289C21B7494329F2332B6D85F0E1C42108C0384ED3E"
-set "WINGET_RESOLVER_SHA256=F784519A4690CF5E223F6C491EC22BE5176485BE5CB13E70F85D53069DC18AC2"
-set "WINGET_RESOLVER_GZIP_B64_1=H4sIAAAAAAAACs07a2/bOLbf/SuIIIBsjKVJ0525hQfBNk2djmebB2Jns0Ca22WkY5sbmVRJKnHQyX+/OCQlUQ8nTncXuPnQxibPg4fnfZjdsZRCHsaaCX4uYQ4SeAzkgARTLbKgt3suxUKCUo1FlgLX6eOR4JrxHILeFHQ41ZLF+kQkQMK/g1RMcPK219uFdQaxhuSUrgz0CYulUGKuo4+g7rTIDrNswpWmaQoyqPaf57cpU0uQCHR0elDCkSMhMyEpcj0kZ5sWPh9cQLISPBmS6cEVVUvGFxoXjg4upx6dqchlDJcyRTpLrTM1+vnnOOHRA+ML0NGq5DcWq59jGi+hBT1J6ie7sqB28eu7B7h7vH2bvLu9fWjDzh6zhlzOJUx4AmtIonMa39EFBL3ePOfmnshEhReQUamgfz05i45ZCtNHpWE14XNxszvRsBqQ7z1CCOmbT9Gh1pLd5hoUCW8pT0gBVy3cjEYO6blgXA9IyIHs9Z48uhfwLWcSwlMhVzT9yCTEWsjH/rXSkvHFze451cshKT9+preQFpzsMg0rckA+gQ6RJxJ+ZhokTRGIGFASHgsZg9nO5qQfcqEtXHQ+nShUNso4SBIKSfqVFOyeQUEJf/RSigeyY1kgTBFERQk3nJOkYD3aMRBPFYfPHBjl9fxZh+Q6FfjphK7ZKl99Br7QS3JA3vx68uHfEMT2MjBfG7kVN3wzGo3XTGnlsBznaYqGaLfa7xyf4UKTOuvbi/RW5DyBhMxZCi9IdcLvxR2EHyxEJdHxGuJc09sUPLkeykW+Aq7VkFwzrm92Z2wFItcnLE2ZgljwpFxyrJ/lOsv1h0cNqpI5muf1p5wlN6PRKTzgb/1BNBPos/iiH5wGA7tT6UTk2tzCAflDMB7ae5E512wFpB9YrxDGS4jvwoD8ZLD/RILIgnqIQMofRQRSFogYnwvk/iOjCy6UZrGKzqWIQampplIbqx+NODz0PQhz+c7jeqL1NpSixR3lB2/DlZB3jC9KQ0cmJmcRHuNmNPoEulxBOn2Pis/HpYLpEtLUrhp25jRVPidHEqiGU3HFeCIecIeWub/hAqzJTjXlCZXJhGe53mKfVYUtNpowWN+XWRFvkHxd4G5vVN4HokJCvk7hheD3PE9TX0U6vxe5PhLZY9f+ru+p1JA0WcUQ/kB1jLdlODstOdby0TPtOoOe5zjLgPc9kxiWixjlb0Yjd3PwUK0cxk4+F0CTK8k0mnMRppZUgluyjLTl0EXeGdJ/h3wVamrX2MeA4rxecMX4J9AkFnmaGMdnRB4Fzsk1laBS0ugoFQqc1DsutwlkNTb6QBVMtQS6inDnTByqRx4XV4FnaYlvE0aj2s8hdKKvED4s8SYaMvmdqvGaaUj8mFAGKKeB0TilmYLE984kXADpcttNRKVeVkT/xtK0PyBPJEY1Jt8raRc/1/eCJTclwBVl+lhI5LT/y97eXnWoehgrLvSepiwx6SJBp5wQkesoqAE9dZ22uIWu0OnFHxtjKxm/sP3/mUSE9Z6wjgEwtjOtiKJz0I8kZSv2vKCMDYXTFCAjYU0fftnrtUG25rq01uvZUgJNGF9EM6rulPn3ZjRC0MM07b8v7gn1fehbyWBIDM62fbsTJ5IyzvjC1wnf0r37P05zteybsNHp0Lo3/Le16N+5U/+gsGb6COs5z6+M3Xed4vjIVGb83W8bo15TQA2QroDoUTEZ80FHZl7L3IqDK+cD3bGDLnE1mXqeQpHStSgAutkXCWCBfKnn7zDOzWCto8vZ8bsxjwXqscspbHo0JA2dqYds"
-set "WINGET_RESOLVER_GZIP_B64_2=TyQoqgpz9Am0S2q9SIoR7zBNDT+F5k1q5UDdL7ij/hBqJ8Mu1IXbsmf/CLFIQB7TNL2l8d14HUOGSnrTOOdLyvxAbTFiVsjl7Dh857kmz8dkKs6VFitx+y+I9c3776RQZjxooey/kaknV/zNfFOKw/xmsT6ROeM0TRvJlI2FmH71N9o8Wmmn5XgMFyBFhHYgLcvpykLKxXLpAlbiHrpqTs9ybOVJQq8vRJrdnu0wFpayNcYnrBJ3H0wNoC6E0K16AzUKP/Wvx/yeScGxYnFLIk3AEOyjoiCKYDCIZpKtxjzpB1+CQW9XmS7J2/16QeZTDGwj5e1+UHJyLh5AmgqmDlYiK+hVG7/cv4n2sM3D70cWoTuOT8suX01OP04uOpeOxGqaQbyJarxKIlibbhK/H50fzn436lms/0SC30xN2TqGA5ieiCRPoV2gts8d2K0q6PXK8nXz3RSlO1K5uDydTU7GzYswPTRHeRs0s4vL6Wz88evV5PTTePYVDzuoumhHHraOQjvQMlcaktDV2xnVy0ivddAz9lXxEsYcSBtrkZU5NzRbAinKAdxCEB8BFdPMxdM5W0NCCvLYEeF0BVHQe+rZNKe/oZPm8Xwu2T3VUGAJBr1eFQB2JX1wfUGsT9/3S4vEptJhlq3dKglNB6Dega1bohYZ+bPmbq+WICE8Mz4SPc7XyILF8K2BybqdQa/MRs1nU3SFrvQOjj+Px0fj4uams8PZ+CCToIDrkHHjsq2vRvdL9t/0nuy1eEeMjkTONQnhG9kbbE0E1jTGyzY4QnqLFH1KpreJ7nIh6Qr9qfpRf3Pu4Wg7HWdOh1n2DIG+p7c1lgrnguAt3C9pUx2TY5M4Pl+E9hmvs4Fya6lfTSkrjaprUz3J2KxZIeVJc281DqgDeN83oUon8hXLYZ0rCxqc3QXtze/7OPSQEAyLMBAMSBjHtuWqasjYglOdS/gb85A8eceeCqmLUxezkPAjqBg4pnq9gdXy7EUVv6LSlCKBm5WQwywj5bQE+7ASFkxpkJAMyW2ujQvKCpkMMUPVuRoSIYmjRlTBPrljPEEczhKNj+rtaljhFMV0/GwWvishS2kMaAAfaHyXZ+VS5ZbmQgKNl9WxCOOkPGKtl9zOZd22F+J+cQVud+QE8VnEJiNs2IdPAMX9bPfSY2BAQoahwLMAr6gqfKtEVpnCLFSxBIhegpsskEwKbXQTI0VpRNXYwS+yjJ6+ZMiecDYogtuCxlmT64pyNgelu0uamt/xiWAQOXGg0XqVBoNNhAsCAfnLyYf6qdar9KZk4B8rTKDahQOWAv1yV1k1DF2R4BVHWCs1yhSWANdMG0X1CBVTs2ji1ts9nAKycEF+6LdfmfFIsct3Pv7W8vsOBSlFX3LpWxp5atxUTHmClc0zudXG63KTSswHG5Vc1d0s8dv+prpiellTe8wZvwRDcm2LvCOxyqhkSnBsxcoEK53JggsJR1RBR/cEyv5/LR3KPHtpaf6uhJRqdm8qMI/D/Naaeo1B1/iwVm6btJ12XiE1l1WTznNcu6EWGrLN4YrswZi6GW21+Geb2wXVhbZpBeTt/smHhgZUftmOBw9zvUTNwTK5DDmNSqs21Gugy238OXCFZIHBhC+QRyA1m7OYalNZlr71mX14LwblE4FUAflOgqZAkFS7J9mBu4jHeEF/N2kgmlwLtDzFBrvrBjJScXEX5zGRUWZuXL2j2floINgS3ZlkC7SHY5fctxWthqStdf7VYmi+t8hDCcq8CdjSZziwC1B5ihddn602tIMEYegAAvJmb29vj7zd/59f"
-set "WINGET_RESOLVER_GZIP_B64_3=37Xtp4a27PjZJwEd7UWX35hBJplTloLltYtVdOpo63UStuNSRu+df8qdIdn5J9/pMG4PUeTm4cpAuJH2hnXesW5G5StTuwT/e//X/pfkp8GXyPzX/+voS4S/fN8b7j/tdjgOCTqXHBJCyYqmcyGxV+yQt4+/ov8yE8ZiVK3jJajrNzeNXYx37Nq/aUvB4gtTTd7YtwDFN/ANv8FHHg4b7vm1w11j6oJFDNFLysmb6NcO/bLKuK16OdWFdSakJtYYSBgmTKHLCxlHvxVrds/0Y0D2jQb+sv+X/XcdKuhTflEDxXzOYkbTsM7BJlW0uwpNrFHyFNFrnRVcFX5sNJqo0zxNz+TVkmmYZjSGvod2sDWL2LuEVabbOaFDV3Fo+P2THAl+D1IfS7EK/1CCt0WHabnRgwKFnR+435ki14dS0sebVzGJgVFwIH9Mz06JbaBGW/l+R9jlWUyZ2Y2T4waPbwEO5eJV+z9STV8FYJPDOcMg8gow81zrVQDYf/oM95Ba6b8expA6EmkKpmujosmY5yuQaFZ13/Dync4ZpIkiuYKE5LyIp/Ze9WMGapMm2gdyVSgvb+mHzORSps4fV9htiC8/Oyt8+UiXF5+NjpZu+PkjNCiYcvHnRhqJwxdTNOEYsXUlfxIcTtJ4WbXJqu4AeRq81iq85KE7A7EZfMX3+FtOU9VvP2HcNnvvpNK8W2tRtbyrfO24DbxvYD+OxdpbB7xd6DIie3lhzIUu2zeBuT9w3cbi52XlKhMxIYnFmxodeC4vwyufgdK2VKsn7GW/uWvaj0MopbHfs/GBoNevrl4JNomXeF56NVjs860MO9xmrtXR52aK5BwHxi0Taxic30PqfP22oSsfcXiIcHDxwmu9uo15bQXTNiv7CiUbw0a2MnxpANuciJbVnBkMbCj5qlOXT4bM7hI46Ei57ZXaUX9Xh8SNVusMVOPVdgJQ4SufCmBj0brbavF678YurMfHLmPsgFwAedtavX5TgH740F7cLxePO5+0bBikVPUyuAsxXr3qTT6jbgaDy+i2nKx742yP+U3itOWC8UL1rLcSqiFr3m2fzQ/5Y/86XlJ5fXPz3qtn8N+9ncHAyHXvx6SDLg243lo4W3kjYlaNS/0MdN7pnLqawK+ybYcgeb2BN4z8wiKq23d5lmEHq633FOWp2t3umihdp+M5bk7E/SZWXk+v0RZ3fY5kY4+puL+gaIkkNb3pdDgl1h+2mI1eqkS96WmJnXvUGOgwq0Y4qsRQswlb4GHRbRtUXZW3awg21KFTv/EVSp498wCobQCB08QGYxZTl+yffzdRceA5mO4w/8xIpq5P9eHui3NTZ7tBB9jvQmmyY5p1VFdHrnVUqCa7rT81wABhBGM7wrHgsQQNZWvYOAj7VwPFjxnSei8FayPmOlvFiKy/cwGYjeOTPQ6ke1xRutER2cHnEV+j8t1RdAJK0YXnI9wrn//IWLvxVMioZekKUN03a4UuPcY2j2kcvy/rfV16O4fOjrDvLSH0QLt020Qfc2J5jz0w3aWQtxDTXDnztfZJEmZfUM8ZZ2pJ4hQoT6u/xHnq/R/vvu8wlDYAAA=="
+set "WINGET_RESOLVER_SHA256=B35B13370ACD8FF2F54999CED084E3556096D44E674012064ADC5A398F4417BD"
+set "WINGET_RESOLVER_GZIP_B64_1=H4sIAAAAAAAACs07a2/bOLbf/SuIIIBsjKVJ0529XQ+CbZo6Hc82D8TOZoE0t8tIxzY3MqmSVOKgk/9+cUhKoh5OnO4ucPOhjU2eBw/P+zC7YymFPIw1E/xcwhwk8BjIAQmmWmRBb/dcioUEpRqLLAWu08cjwTXjOQS9KehwqiWL9YlIgIR/B6mY4ORtr7cL6wxiDckpXRnoExZLocRcRx9B3WmRHWbZhCtN0xRkUO0/z29TppYgEejo9KCEI0dCZkJS5HpIzjYtfD64gGQleDIk04MrqpaMLzQuHB1cTj06U5HLGC5linSWWmdq9PPPccKjB8YXoKNVyW8sVj/HNF5CC3qS1E92ZUHt4td3D3D3ePs2eXd7+9CGnT1mDbmcS5jwBNaQROc0vqMLCHq9ec7NPZGJCi8go1JB/3pyFh2zFKaPSsNqwufiZneiYTUg33uEENI3n6JDrSW7zTUoEt5SnpACrlq4GY0c0nPBuB6QkAPZ6z15dC/gW84khKdCrmj6kUmItZCP/WulJeOLm91zqpdDUn78TG8hLTjZZRpW5IB8Ah0iTyT8zDRImiIQMaAkPBYyBrOdzUk/5EJbuOh8OlGobJRxkCQUkvQrKdg9g4IS/uilFA9kx7JAmCKIihJuOCdJwXq0YyCeKg6fOTDK6/mzDsl1KvDTCV2zVb76DHyhl+SAvPnzyYd/QxDby8B8beRW3PDNaDReM6WVw3Kcpykaot1qv3N8hgtN6qxvL9JbkfMEEjJnKbwg1Qm/F3cQfrAQlUTHa4hzTW9T8OR6KBf5CrhWQ3LNuL7ZnbEViFyfsDRlCmLBk3LJsX6W6yzXHx41qErmaJ7Xn3KW3IxGp/CAv/UH0Uygz+KLfnAaDOxOpRORa3MLB+R3wXho70XmXLMVkH5gvUIYLyG+CwPyk8H+EwkiC+ohAil/FBFIWSBifC6Q+4+MLrhQmsUqOpciBqWmmkptrH404vDQ9yDM5TuP64nW21CKFneUH7wNV0LeMb4oDR2ZmJxFeIyb0egT6HIF6fQ9Kj4flwqmS0hTu2rYmdNU+ZwcSaAaTsUV44l4wB1a5v6GC7AmO9WUJ1QmE57leot9VhW22GjCYH1fZkW8QfJ1gbu9UXkfiAoJ+TqFF4Lf8zxNfRXp/F7k+khkj137u76nUkPSZBVD+APVMd6W4ey05FjLR8+06wx6nuMsA973TGJYLmKUvxmN3M3BQ7VyGDv5XABNriTTaM5FmFpSCW7JMtKWQxd5Z0j/HfJVqKldYx8DivN6wRXjn0CTWORpYhyfEXkUOCfXVIJKSaOjVChwUu+43CaQ1djoA1Uw1RLoKsKdM3GoHnlcXAWepSW+TRiNaj+H0Im+QviwxJtoyOQ3qsZrpiHxY0IZoJwGRuOUZgoS3zuTcAGky203EZV6WRH9G0vT/oA8kRjVmHyvpF38XN8LltyUAFeU6WMhkdP+L3t7e9Wh6mGsuNB7mrLEpIsEnXJCRK6joAb01HXa4ha6QqcXf2yMrWT8wvb/ZxIR1nvCOgbA2M60IorOQT+SlK3Y84IyNhROU4CMhDV9+GWv1wbZmuvSWq9nSwk0YXwRzai6U+bfm9EIQQ/TtP++uCfU96FvJYMhMTjb9u1OnEjKOOMLXyd8S/fu/zjN1bJvwkanQ+ve8N/Won/nTv2DwprpI6znPL8ydt91iuMjU5nxd79ujHpNATVAugKiR8VkzAcdmXktcysOrp"
+set "WINGET_RESOLVER_GZIP_B64_2=wPdMcOusTVZOp5CkVK16IA6GZfJIAF8qWev8M4N4O1ji5nx+/GPBaoxy6nsOnRkDR0ph6yPZGgqCrM0SfQLqn1IilGvMM0NfwUmjeplQN1v+CO+kOonQy7UBduy579I8QiAXlM0/SWxnfjdQwZKulN45wvKfMDtcWIWSGXs+PwneeaPB+TqThXWqzE7b8g1jfvv5NCmfGghbL/SqaeXPE3800pDvObxfpE5ozTNG0kUzYWYvrV32jzaKWdluMxXIAUEdqBtCynKwspF8ulC1iJe+iqOT3LsZUnCb2+EGl2e7bDWFjK1hifsErcfTA1gLoQQrfqDdQo/NS/HvN7JgXHisUtiTQBQ7CPioIogsEgmkm2GvOkH3wJBr1dZbokb/frBZlPMbCNlLf7QcnJuXgAaSqYOliJrKBXbfxy/ybawzYPvx9ZhO44Pi27fDU5/Ti56Fw6EqtpBvEmqvEqiWBtukn8fnR+OPvNqGex/hMJfjU1ZesYDmB6IpI8hXaB2j53YLeqoNcry9fNd1OU7kjl4vJ0NjkZNy/C9NAc5W3QzC4up7Pxx69Xk9NP49lXPOyg6qIdedg6Cu1Ay1xpSEJXb2dULyO91kHP2FfFSxhzIG2sRVbm3NBsCaQoB3ALQXwEVEwzF0/nbA0JKchjR4TTFURB76ln05z+hk6ax/O5ZPdUQ4ElGPR6VQDYlfTB9QWxPn3fLy0Sm0qHWbZ2qyQ0HYB6B7ZuiVpk5I+au71agoTwzPhI9DhfIwsWw7cGJut2Br0yGzWfTdEVutI7OP48Hh+Ni5ubzg5n44NMggKuQ8aNy7a+Gt0v2X/Te7LX4h0xOhI51ySEb2RvsDURWNMYL9vgCOktUvQpmd4musuFpCv0p+pH/c25h6PtdJw5HWbZMwT6nt7WWCqcC4K3cL+kTXVMjk3i+HwR2me8zgbKraV+NaWsNKquTfUkY7NmhZQnzb3VOKAO4H3fhCqdyFcsh3WuLGhwdhe0N7/v49BDQjAswkAwIGEc25arqiFjC051LuFvzEPy5B17KqQuTl3MQsKPoGLgmOr1BlbLsxdV/IpKU4oEblZCDrOMlNMS7MNKWDClQUIyJLe5Ni4oK2QyxAxV52pIhCSOGlEF++SO8QRxOEs0Pqq3q2GFUxTT8bNZ+K6ELKUxoAF8oPFdnpVLlVuaCwk0XlbHIoyT8oi1XnI7l3XbXoj7xRW43ZETxGcRm4ywYR8+ART3s91Lj4EBCRmGAs8CvKKq8K0SWWUKs1DFEiB6CW6yQDIptNFNjBSlEVVjB7/IMnr6kiF7wtmgCG4LGmdNrivK2RyU7i5pan7HJ4JB5MSBRutVGgw2ES4IBORPJx/qp1qv0puSgX+sMIFqFw5YCvTLXWXVMHRFglccYa3UKFNYAlwzbRTVI1RMzaKJW2/3cArIwgX5od9+ZcYjxS7f+fhby+87FKQUfcmlb2nkqXFTMeUJVjbP5FYbr8tNKjEfbFRyVXezxG/7m+qK6WVN7TFn/BIMybUt8o7EKqOSKcGxFSsTrHQmCy4kHFEFHd0TKPv/tXQo8+ylpfm7ElKq2b2pwDwO81tr6jUGXePDWrlt0nbaeYXUXFZNOs9x7YZaaMg2hyuyB2PqZrTV4p9tbhdUF9qmFZC3+ycfGhpQ+WU7HjzM9RI1B8vkMuQ0Kq3aUK+BLrfx58AVkgUGE75AHoHUbM5iqk1lWfrWZ/bhvRiUTwRSBeQ7CZoC"
+set "WINGET_RESOLVER_GZIP_B64_3=QVLtnmQH7iIe4wX93aSBaHIt0PIUG+yuG8hIxcVdnMdERpm5cfWOZuejgWBLdGeSLdAejl1y31a0GpK21vlXi6H53iIPJSjzJmBLn+HALkDlKV50fbba0A4ShKEDCMibvb29PfJ2/3/+/K5tPzW0ZcfPPgnoaC+6/MYMMsmcshQsr12solNHW6+TsB2XMnrv/FPuDMnOP/lOh3F7iCI3D1cGwo20N6zzjnUzKl+Z2iX43/u/9r8kPw2+ROa//l9HXyL85fvecP9pt8NxSNC55JAQSlY0nQuJvWKHvH38Ff2XmTAWo2odL0Fdv7lp7GK8Y9f+TVsKFl+YavLGvgUovoFv+A0+8nDYcM/+Xzr8NeYuWMUQvaScvIn2/9KhYVYdt1Uwp7ywzoTUxJoDCcOEKXR6IePouWLN7pl+DMi+0cFf9v+0/65DCX3KL+qgmM9ZzGga1jnYpIx2V6GLNUqeKnrNs4KrwpONRhN1mqfpmbxaMg3TjMbQ99AOtmYRu5ewynQ7K3ToKg4Nv3+QI8HvQepjKVbh70rwtugwMTeaUKCwEwT3O1Pk+lBK+njzKiYxNAoO5Pfp2SmxLdRoK+/vCLtMiykzvXFy3ODzLcChXLxq/0eq6asAbHo4ZxhGXgFmHmy9CgA7UJ/hHlIr/dfDGFJHIk3B9G1UNBnzfAUSzaruHV6+0zmDNFEkV5CQnBcR1d6rfsxAbdJE+0SuCublLf2QmVzK1HnkCrsN8uVnZ4UvH+ny4rPR0dIRP3+EBgVTMP7cSCRx/GLKJhwktq7kD4LjSRovq0ZZ1R8gT4PXWoWXPnTnIDaHr/gef8tpqvrtR4zb5u+dVJp3ay2qlnmV7x23gfcN7MexWHvrgLcLXUZkLy+MudBlAycw9weu31j8vKxcZSomJLF4U6MDz2VmeOUzUNoWa/WUvew4d837cQylNHZ8Nj4R9DrW1TvBJvESz0vvBot9vpVhj9tMtjo63UyRnOPIuGViDYPzu0id79829OUjDg8Rji5eeK9XtzGvsWAaZ2VnoWRj2MhWhi+NYJsz0bKeM6OBDUVfdery0ZDZXQIHHUm3vVI77O/qkbjhap2BasDaTgAqfOVjAWwtWndbLV7v3diF9fjY5YwdkAsgb1ur128K0A8f2ov75eJx56OWDaOUqmIGdyHGq1fdyWfUzWBwGd2Ws3VvoO0xv0mctmAwXqie9VZCNWTNy+2z+SF/7F/HSyqvb27eexUN/ru3MxgYue79mHTQpQHXWwtnK29EzKpxqZ+BzjudU1cb+FW27RAkrzfwhpFfWER1+y7PMuxgtfWiojxVu99dE6XrdTzHzYm438TK6+k1GuOu05Fs7DIV9xcUTZGkpjedDqfE+sMWs9FLlag3PS6xk48aAx1m1QhHlRhqNmELPCy7bYuqq/Z2LcGGOnTqN75DybNnngC1DSBwmthgzGLqkv3zLycqDjwH0x3mnxnK1PWpPt59cXLqbDfoAPtNKE12TLuO6urItZ4K1WS39ccGGCCMYGxPOBY8lqChbA4bB2H/bqD4MWNa761gbchcZ6sYkvV3LgCzcXy0x4F0DyxKNzoiO/hA4mtUvjyKTkApuvB8hHvn8x8ZbDceCxm1LF0BqvtmrdClx9jmOY3j92W9r0tv59DZEXa+JYQeaJdum+hjTizvsQumuxTyFmKaK2e+1j5Jwuwb6jnjTC1JnALlafW3OE+9/wMPoDcFljYAAA=="
 
 set "NATIVE_ARCH=%PROCESSOR_ARCHITECTURE%"
 if defined PROCESSOR_ARCHITEW6432 set "NATIVE_ARCH=%PROCESSOR_ARCHITEW6432%"
@@ -458,7 +455,7 @@ exit /b %ERRORLEVEL%
 exit /b %ERRORLEVEL%
 
 :WriteSetupMarker
-if /I not "%ENV_MODE%"=="venv" if /I not "%ENV_MODE%"=="embedded" exit /b 1
+if /I not "%ENV_MODE%"=="embedded" exit /b 1
 >"%SETUP_MARKER%.new" echo %ENV_MODE%
 if errorlevel 1 exit /b 1
 move /y "%SETUP_MARKER%.new" "%SETUP_MARKER%" >>"%LOG%" 2>&1
@@ -482,82 +479,6 @@ if not "%SETUP_LOCK_HELD%"=="1" exit /b 0
 exit /b %ERRORLEVEL%
 
 
-:FindBasePython
-set "BASE_PY="
-where py.exe >nul 2>nul
-if errorlevel 1 goto FindPathPython
-for %%V in (3.14 3.13 3.12 3.11 3.10) do call :TryPyTag %%V
-if defined BASE_PY exit /b 0
-
-:FindPathPython
-call :TryPythonCommand python.exe
-if defined BASE_PY exit /b 0
-call :TryPythonCommand python3.exe
-if defined BASE_PY exit /b 0
-for /f "delims=" %%P in ('where python.exe 2^>nul ^| findstr /V /I /C:"Microsoft\WindowsApps"') do call :TryPythonPath "%%P"
-if defined BASE_PY exit /b 0
-for /f "delims=" %%P in ('where python3.exe 2^>nul ^| findstr /V /I /C:"Microsoft\WindowsApps"') do call :TryPythonPath "%%P"
-if defined BASE_PY exit /b 0
-
-for %%P in (
-    "%LocalAppData%\Programs\Python\Python314\python.exe"
-    "%LocalAppData%\Programs\Python\Python313\python.exe"
-    "%LocalAppData%\Programs\Python\Python312\python.exe"
-    "%LocalAppData%\Programs\Python\Python311\python.exe"
-    "%LocalAppData%\Programs\Python\Python310\python.exe"
-    "%ProgramFiles%\Python314\python.exe"
-    "%ProgramFiles%\Python313\python.exe"
-    "%ProgramFiles%\Python312\python.exe"
-    "%ProgramFiles%\Python311\python.exe"
-    "%ProgramFiles%\Python310\python.exe"
-) do call :TryPythonPath "%%~fP"
-exit /b 0
-
-:TryPythonCommand
-if defined BASE_PY exit /b 0
-where %~1 >nul 2>nul
-if errorlevel 1 exit /b 1
-set "CANDIDATE_FILE=%RUNTIME%\python-candidate.txt"
-%~1 -I -c "import sys; print(sys.executable)" >"%CANDIDATE_FILE%" 2>>"%LOG%"
-if errorlevel 1 exit /b 1
-set "CANDIDATE="
-set /p "CANDIDATE="<"%CANDIDATE_FILE%"
-del /f /q "%CANDIDATE_FILE%" >nul 2>nul
-if not defined CANDIDATE exit /b 1
-call :TryPythonPath "%CANDIDATE%"
-exit /b %ERRORLEVEL%
-
-:TryPyTag
-if defined BASE_PY exit /b 0
-py -0p 2>nul | findstr /I /C:":%~1" >nul
-if errorlevel 1 exit /b 1
-set "CANDIDATE_FILE=%RUNTIME%\python-candidate.txt"
-py -%~1 -I -c "import sys; print(sys.executable)" >"%CANDIDATE_FILE%" 2>>"%LOG%"
-if errorlevel 1 exit /b 1
-set "CANDIDATE="
-set /p "CANDIDATE="<"%CANDIDATE_FILE%"
-del /f /q "%CANDIDATE_FILE%" >nul 2>nul
-if not defined CANDIDATE exit /b 1
-call :TryPythonPath "%CANDIDATE%"
-exit /b %ERRORLEVEL%
-
-:TryPythonPath
-if defined BASE_PY exit /b 0
-if "%~1"=="" exit /b 1
-if not exist "%~1" exit /b 1
-call :ValidatePython "%~1"
-if errorlevel 1 exit /b 1
-set "BASE_PY=%~1"
-set "LOG_MESSAGE=Found compatible base CPython: %~1"
-call :LogCurrent
-exit /b 0
-
-:ValidatePython
-if "%~1"=="" exit /b 1
-if not exist "%~1" exit /b 1
-"%~1" -I -c "import sys, struct, venv, ensurepip; ok = sys.implementation.name == 'cpython' and (3, 10) <= sys.version_info[:2] < (3, 15) and struct.calcsize('P') == 8; raise SystemExit(0 if ok else 1)" >>"%LOG%" 2>&1
-exit /b %ERRORLEVEL%
-
 :ValidateEmbeddedPython
 call :ValidateEmbeddedPythonAt "%PYTHON_DIR%"
 exit /b %ERRORLEVEL%
@@ -574,16 +495,6 @@ if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 "%~1\python.exe" -I -c "import sys; sys.path.insert(0, sys.argv[1]); from pip._internal.cli.main import main; raise SystemExit(main(sys.argv[2:]))" "%~1\pip.whl" --version >>"%LOG%" 2>&1
 exit /b %ERRORLEVEL%
-
-:DescribePython
-"%~1" -I -c "import sys, platform; print('Selected CPython ' + platform.python_version() + ' at ' + sys.executable)" >>"%LOG%" 2>&1
-set "PYTHON_VERSION_FILE=%RUNTIME%\python-version.txt"
-"%~1" -I -c "import platform; print(platform.python_version())" >"%PYTHON_VERSION_FILE%" 2>>"%LOG%"
-set "PYTHON_DISPLAY_VERSION="
-if exist "%PYTHON_VERSION_FILE%" set /p "PYTHON_DISPLAY_VERSION="<"%PYTHON_VERSION_FILE%"
-del /f /q "%PYTHON_VERSION_FILE%" >nul 2>nul
-if defined PYTHON_DISPLAY_VERSION echo      Using compatible Python %PYTHON_DISPLAY_VERSION%.
-exit /b 0
 
 :InstallEmbedPy
 call :ValidateEmbeddedPython
@@ -618,38 +529,16 @@ call :LogCurrent
 exit /b 0
 
 :ValidateSelectedEnvironment
-if /I "%ENV_MODE%"=="venv" goto ValidateSelectedVenv
-if /I "%ENV_MODE%"=="embedded" goto ValidateSelectedEmbedded
-exit /b 1
-
-:ValidateSelectedVenv
-call :ValidateVenv
-exit /b %ERRORLEVEL%
-
-:ValidateSelectedEmbedded
+if /I not "%ENV_MODE%"=="embedded" exit /b 1
 call :ValidateEmbeddedPython
 exit /b %ERRORLEVEL%
 
-:ValidateVenv
-if not exist "%VENV_PY%" exit /b 1
-if not exist "%VENV_PYW%" exit /b 1
-"%VENV_PY%" -I -c "import sys, struct; ok = sys.implementation.name == 'cpython' and (3, 10) <= sys.version_info[:2] < (3, 15) and struct.calcsize('P') == 8 and sys.prefix != sys.base_prefix; raise SystemExit(0 if ok else 1)" >>"%LOG%" 2>&1
-exit /b %ERRORLEVEL%
-
-:CreateVenv
-if not defined BASE_PY exit /b 1
-call :ValidatePython "%BASE_PY%"
-if errorlevel 1 exit /b 1
-
-if exist "%VENV%" call :RemoveDirectoryRobust "%VENV%"
-if exist "%VENV%" exit /b 1
-
-set "LOG_MESSAGE=Creating virtual environment with: %BASE_PY%"
-call :LogCurrent
-"%BASE_PY%" -I -m venv --copies "%VENV%" >>"%LOG%" 2>&1
-if errorlevel 1 exit /b 1
-call :ValidateVenv
-exit /b %ERRORLEVEL%
+:ValidateLegacyVenvLayoutAt
+if "%~1"=="" exit /b 1
+if not exist "%~1\Scripts\python.exe" exit /b 1
+if not exist "%~1\Scripts\pythonw.exe" exit /b 1
+if not exist "%~1\pyvenv.cfg" exit /b 1
+exit /b 0
 
 :InstallPythonPackages
 if not defined APP_PY exit /b 1
@@ -658,17 +547,13 @@ call :CurrentPackagesFullyHealthy
 if not errorlevel 1 exit /b 0
 call :BeginPackageTransaction
 if errorlevel 1 exit /b 1
-if /I "%ENV_MODE%"=="venv" call :InstallVenvPackages
-if /I "%ENV_MODE%"=="embedded" call :InstallEmbeddedPackages
+if /I not "%ENV_MODE%"=="embedded" exit /b 1
+call :InstallEmbeddedPackages
 set "PACKAGE_TRANSACTION_CODE=%ERRORLEVEL%"
 call :FinishPackageTransaction %PACKAGE_TRANSACTION_CODE%
 exit /b %ERRORLEVEL%
 
 :CurrentPackagesFullyHealthy
-if /I "%ENV_MODE%"=="venv" (
-    call :HasPinnedPip
-    if errorlevel 1 exit /b 1
-)
 call :HasPinnedPySide
 if errorlevel 1 exit /b 1
 call :VerifyPythonPackages
@@ -677,22 +562,25 @@ exit /b %ERRORLEVEL%
 :BeginPackageTransaction
 set "PACKAGE_BACKUP=%RUNTIME%\b"
 set "PACKAGE_BACKUP_NEW=%PACKAGE_BACKUP%.new"
-set "PACKAGE_TARGET="
-set "PACKAGE_BACKUP_PROBE="
-if /I "%ENV_MODE%"=="venv" set "PACKAGE_TARGET=%VENV%"
-if /I "%ENV_MODE%"=="embedded" set "PACKAGE_TARGET=%PYTHON_DIR%"
-if /I "%ENV_MODE%"=="venv" set "PACKAGE_BACKUP_PROBE=Scripts\python.exe"
-if /I "%ENV_MODE%"=="embedded" set "PACKAGE_BACKUP_PROBE=python.exe"
-if not defined PACKAGE_TARGET exit /b 1
-if not defined PACKAGE_BACKUP_PROBE exit /b 1
+if /I not "%ENV_MODE%"=="embedded" exit /b 1
+set "PACKAGE_TARGET=%PYTHON_DIR%"
+set "PACKAGE_BACKUP_PROBE=python.exe"
 if exist "%PACKAGE_BACKUP%" (
     call :ValidatePrivateTree "%PACKAGE_BACKUP%"
     if errorlevel 1 exit /b 1
-    if not exist "%PACKAGE_BACKUP%\%PACKAGE_BACKUP_PROBE%" exit /b 1
-    set "LOG_MESSAGE=Recovering the local package environment left by an interrupted repair."
-    call :LogCurrent
-    call :ReplaceDirectory "%PACKAGE_BACKUP%" "%PACKAGE_TARGET%"
-    if errorlevel 1 exit /b 1
+    if exist "%PACKAGE_BACKUP%\%PACKAGE_BACKUP_PROBE%" (
+        set "LOG_MESSAGE=Recovering the local package environment left by an interrupted repair."
+        call :LogCurrent
+        call :ReplaceDirectory "%PACKAGE_BACKUP%" "%PACKAGE_TARGET%"
+        if errorlevel 1 exit /b 1
+    ) else (
+        call :ValidateLegacyVenvLayoutAt "%PACKAGE_BACKUP%"
+        if errorlevel 1 exit /b 1
+        set "LOG_MESSAGE=Removing a completed package backup from the retired virtual-environment setup."
+        call :LogCurrent
+        call :RemoveDirectoryRobust "%PACKAGE_BACKUP%"
+        if errorlevel 1 exit /b 1
+    )
 )
 if not exist "%PACKAGE_TARGET%" exit /b 1
 call :ValidatePrivateTree "%PACKAGE_TARGET%"
@@ -727,50 +615,6 @@ call :ReplaceDirectory "%PACKAGE_BACKUP%" "%PACKAGE_TARGET%"
 if errorlevel 1 exit /b 1
 exit /b %PACKAGE_TRANSACTION_CODE%
 
-:InstallVenvPackages
-call :EnsureCurrentVenvPip
-if errorlevel 1 exit /b 1
-call :HasPinnedPySide
-if errorlevel 1 goto CheckVenvPip
-call :VerifyPythonPackages
-if not errorlevel 1 exit /b 0
-
-:CheckVenvPip
-"%APP_PY%" -I -m pip --version >>"%LOG%" 2>&1
-if not errorlevel 1 goto InstallPinnedVenvPackage
-set "LOG_MESSAGE=pip was missing; attempting ensurepip repair."
-call :LogCurrent
-"%APP_PY%" -I -m ensurepip --upgrade >>"%LOG%" 2>&1
-if errorlevel 1 exit /b 1
-
-:InstallPinnedVenvPackage
-set "LOG_MESSAGE=Installing pinned %PYSIDE_DISTRIBUTION% %PYSIDE_VERSION% from official PyPI."
-call :LogCurrent
-"%APP_PY%" -I -m pip --isolated --disable-pip-version-check install --upgrade --no-cache-dir --only-binary=:all: --index-url "%PYPI_INDEX%" "%PYSIDE_DISTRIBUTION%==%PYSIDE_VERSION%" >>"%LOG%" 2>&1
-set "PACKAGE_INSTALL_CODE=%ERRORLEVEL%"
-goto CheckInstalledPackages
-
-:EnsureCurrentVenvPip
-call :HasPinnedPip
-if not errorlevel 1 exit /b 0
-"%APP_PY%" -I -m pip --version >>"%LOG%" 2>&1
-if not errorlevel 1 goto UpgradeCurrentVenvPip
-set "LOG_MESSAGE=pip was missing; attempting ensurepip repair."
-call :LogCurrent
-"%APP_PY%" -I -m ensurepip --upgrade >>"%LOG%" 2>&1
-if errorlevel 1 exit /b 1
-:UpgradeCurrentVenvPip
-"%APP_PY%" -I -m pip --isolated --disable-pip-version-check install --upgrade --no-cache-dir --only-binary=:all: --index-url "%PYPI_INDEX%" "pip==%PIP_VERSION%" >>"%LOG%" 2>&1
-if errorlevel 1 exit /b 1
-"%APP_PY%" -I -c "from importlib.metadata import version; raise SystemExit(0 if version('pip') == '%PIP_VERSION%' else 1)" >>"%LOG%" 2>&1
-exit /b %ERRORLEVEL%
-
-:HasPinnedPip
-if not defined APP_PY exit /b 1
-if not exist "%APP_PY%" exit /b 1
-"%APP_PY%" -I -c "from importlib.metadata import version; raise SystemExit(0 if version('pip') == '%PIP_VERSION%' else 1)" >>"%LOG%" 2>&1
-exit /b %ERRORLEVEL%
-
 :InstallEmbeddedPackages
 call :ValidateEmbeddedPython
 if errorlevel 1 exit /b 1
@@ -787,7 +631,6 @@ if errorlevel 1 exit /b 1
 "%APP_PY%" -I -c "import sys; sys.path.insert(0, sys.argv[1]); from pip._internal.cli.main import main; raise SystemExit(main(sys.argv[2:]))" "%PIP_WHEEL%" --isolated --disable-pip-version-check install --upgrade --no-cache-dir --only-binary=:all: --index-url "%PYPI_INDEX%" --target "%LOCAL_SITE%" "%PYSIDE_DISTRIBUTION%==%PYSIDE_VERSION%" >>"%LOG%" 2>&1
 set "PACKAGE_INSTALL_CODE=%ERRORLEVEL%"
 
-:CheckInstalledPackages
 if not "%PACKAGE_INSTALL_CODE%"=="0" goto RepairPythonPackages
 call :VerifyPythonPackages
 if not errorlevel 1 exit /b 0
@@ -796,20 +639,12 @@ if not errorlevel 1 exit /b 0
 echo      A component check failed. Repairing local packages...
 set "LOG_MESSAGE=Initial package validation failed; forcing a clean package reinstall."
 call :LogCurrent
-if /I "%ENV_MODE%"=="venv" goto RepairVenvPackages
-if /I "%ENV_MODE%"=="embedded" goto RepairEmbeddedPackages
-exit /b 1
+if /I not "%ENV_MODE%"=="embedded" exit /b 1
 
-:RepairVenvPackages
-"%APP_PY%" -I -m pip --isolated --disable-pip-version-check install --upgrade --force-reinstall --no-cache-dir --only-binary=:all: --index-url "%PYPI_INDEX%" "%PYSIDE_DISTRIBUTION%==%PYSIDE_VERSION%" >>"%LOG%" 2>&1
-goto RepairPackagesFinished
-
-:RepairEmbeddedPackages
 call :ResetEmbeddedPackages
 if errorlevel 1 exit /b 1
 "%APP_PY%" -I -c "import sys; sys.path.insert(0, sys.argv[1]); from pip._internal.cli.main import main; raise SystemExit(main(sys.argv[2:]))" "%PIP_WHEEL%" --isolated --disable-pip-version-check install --upgrade --force-reinstall --no-cache-dir --only-binary=:all: --index-url "%PYPI_INDEX%" --target "%LOCAL_SITE%" "%PYSIDE_DISTRIBUTION%==%PYSIDE_VERSION%" >>"%LOG%" 2>&1
 
-:RepairPackagesFinished
 if errorlevel 1 exit /b 1
 call :VerifyPythonPackages
 exit /b %ERRORLEVEL%
@@ -819,15 +654,7 @@ if not defined APP_PY exit /b 1
 if not exist "%APP_PY%" exit /b 1
 "%APP_PY%" -I -c "import PySide6; from importlib.metadata import version; from PySide6.QtCore import qVersion; assert version('%PYSIDE_DISTRIBUTION%') == '%PYSIDE_VERSION%'; print('%PYSIDE_DISTRIBUTION%=' + version('%PYSIDE_DISTRIBUTION%')); print('Qt=' + qVersion())" >>"%LOG%" 2>&1
 if errorlevel 1 exit /b 1
-if /I "%ENV_MODE%"=="venv" goto CheckVenvDependencies
-if /I "%ENV_MODE%"=="embedded" goto CheckEmbeddedDependencies
-exit /b 1
-
-:CheckVenvDependencies
-"%APP_PY%" -I -m pip --isolated --disable-pip-version-check check >>"%LOG%" 2>&1
-exit /b %ERRORLEVEL%
-
-:CheckEmbeddedDependencies
+if /I not "%ENV_MODE%"=="embedded" exit /b 1
 "%APP_PY%" -I -c "import sys; sys.path.insert(0, sys.argv[1]); from pip._internal.cli.main import main; raise SystemExit(main(sys.argv[2:]))" "%PIP_WHEEL%" --isolated --disable-pip-version-check check >>"%LOG%" 2>&1
 exit /b %ERRORLEVEL%
 
@@ -875,10 +702,6 @@ exit /b %ERRORLEVEL%
 set "REPLACE_NEW=%~1"
 set "REPLACE_TARGET=%~2"
 goto ReplaceDirectoryValuesReady
-
-:ReplaceDirectoryCurrent
-if not defined REPLACE_NEW exit /b 1
-if not defined REPLACE_TARGET exit /b 1
 
 :ReplaceDirectoryValuesReady
 set "REPLACE_BACKUP=%REPLACE_TARGET%.old"

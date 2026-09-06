@@ -20,7 +20,7 @@ from typing import Optional
 
 
 APP_TITLE = "Mass Installer"
-APP_VERSION = "1.0.9"
+APP_VERSION = "1.0.10"
 APP_DIR = Path(__file__).resolve().parent
 RUNTIME_DIR = APP_DIR / ".runtime"
 LOGS_DIR = RUNTIME_DIR / "logs"
@@ -773,7 +773,7 @@ class AnimatedDropdown(QWidget):
         self.button.clicked.connect(self.toggle_popup)
         layout.addWidget(self.button)
 
-        self.popup = QFrame(None, Qt.Tool | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint)
+        self.popup = QFrame(self, Qt.Tool | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint)
         self.popup.setObjectName("dropdownPopup")
         self.popup.setAttribute(Qt.WA_TranslucentBackground)
         outer = QVBoxLayout(self.popup)
@@ -824,8 +824,13 @@ class AnimatedDropdown(QWidget):
             final_y = top_left.y() - popup_height - 4
         final_x = top_left.x()
         if available and final_x + popup_width > available.right():
-            final_x = available.right() - popup_width
-        final_x = max(available.left(), final_x) if available else final_x
+            final_x = available.right() - popup_width + 1
+        if available:
+            final_x = max(available.left(), final_x)
+            final_y = max(
+                available.top(),
+                min(final_y, available.bottom() - popup_height + 1),
+            )
         end_rect = QRect(final_x, final_y, popup_width, popup_height)
         QApplication.instance().installEventFilter(self)
         self.popup.setGeometry(end_rect)
@@ -2149,10 +2154,32 @@ exit 1
         path = Path(filename)
         if not path.suffix:
             path = path.with_suffix(".fleecepack")
+        temporary_path = None
         try:
-            path.write_text(json.dumps(self.profile_payload(), indent=2) + "\n", encoding="utf-8")
-        except OSError as error:
+            payload = json.dumps(self.profile_payload(), indent=2) + "\n"
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                newline="\n",
+                dir=path.parent,
+                prefix=f".{path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as temporary_file:
+                temporary_path = Path(temporary_file.name)
+                temporary_file.write(payload)
+                temporary_file.flush()
+                os.fsync(temporary_file.fileno())
+            os.replace(temporary_path, path)
+            temporary_path = None
+        except (OSError, ValueError) as error:
             QMessageBox.warning(self, "Could not save", f"The selection could not be saved.\n\n{error}")
+        finally:
+            if temporary_path is not None:
+                try:
+                    temporary_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
     def load_profile(self):
         filename, _ = QFileDialog.getOpenFileName(
@@ -2245,9 +2272,11 @@ exit 1
         self.preflight_process = None
         self.preflight_stage = ""
         process.deleteLater()
+        normal_exit = exit_status == QProcess.NormalExit
         if stage == "install-source":
             valid_source = (
-                exit_code == 0
+                normal_exit
+                and exit_code == 0
                 and bool(output)
                 and self.is_official_winget_source(output)
             )
@@ -2256,7 +2285,7 @@ exit 1
                 output or f"exit {exit_code}",
             )
             return
-        if exit_code != 0 or not output:
+        if not normal_exit or exit_code != 0 or not output:
             self.finish_winget_preflight(False, output or f"exit {exit_code}")
             return
         if stage == "version":
@@ -2292,6 +2321,7 @@ exit 1
         process = self.preflight_process
         if process is None:
             return
+        self.preflight_timer.stop()
         stage = self.preflight_stage
         self.preflight_process = None
         self.preflight_stage = ""
@@ -2545,7 +2575,14 @@ exit 1
         if self.process_decoder is not None:
             self.consume_install_text(self.process_decoder.decode(b"", final=True), final=True)
         output = "\n".join(self.current_output_lines)
-        state, label = self.classify_install_result(exit_code, output, self.force_stopping)
+        if exit_status != QProcess.NormalExit and not self.force_stopping:
+            state, label = "failed", "WinGet stopped unexpectedly"
+        else:
+            state, label = self.classify_install_result(
+                exit_code,
+                output,
+                self.force_stopping,
+            )
         self.complete_current(state, label)
 
     @classmethod
@@ -2828,7 +2865,8 @@ exit 1
 
     def closeEvent(self, event: QCloseEvent):
         self.category_filter.hide_popup()
-        if self.install_source_recheck_pending:
+        was_install_source_recheck = self.install_source_recheck_pending
+        if self.preflight_process is not None:
             self.install_source_recheck_pending = False
             self.preflight_timer.stop()
             process = self.preflight_process
@@ -2838,6 +2876,7 @@ exit 1
                 if process.state() != QProcess.NotRunning:
                     process.kill()
                 process.deleteLater()
+        if was_install_source_recheck:
             event.accept()
             return
         if self.install_active:
@@ -2856,7 +2895,7 @@ exit 1
 
 
 def run_self_test(application: QApplication) -> int:
-    assert APP_VERSION == "1.0.9"
+    assert APP_VERSION == "1.0.10"
     assert acquire_app_mutex()
     assert not acquire_app_mutex()
     release_app_mutex()
@@ -3295,6 +3334,24 @@ def run_self_test(application: QApplication) -> int:
     assert not window.install_source_recheck_pending
     assert window.preflight_process is None and window.preflight_stage == ""
     assert source_check_cleanup == ["kill", "delete"]
+
+    ordinary_preflight_cleanup = []
+
+    class OrdinaryPreflightProcess(PendingSourceProcess):
+        def kill(self):
+            ordinary_preflight_cleanup.append("kill")
+
+        def deleteLater(self):
+            ordinary_preflight_cleanup.append("delete")
+
+    window.install_source_recheck_pending = False
+    window.preflight_stage = "version"
+    window.preflight_process = OrdinaryPreflightProcess()
+    ordinary_close_event = QCloseEvent()
+    window.closeEvent(ordinary_close_event)
+    assert ordinary_close_event.isAccepted()
+    assert window.preflight_process is None and window.preflight_stage == ""
+    assert ordinary_preflight_cleanup == ["kill", "delete"]
     window.show_review()
     assert window.stack.currentIndex() == MassInstaller.REVIEW_PAGE
     window.close()
