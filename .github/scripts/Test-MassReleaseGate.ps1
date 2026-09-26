@@ -148,13 +148,13 @@ switch ($first.State) {
         }
         if ($firstCode -eq 0) { throw 'Setup reported success with a WinGet version below the supported minimum.' }
         if ($firstCode -ne 1) { throw "Expected the setup failure wrapper to return 1 for unsupported WinGet; got $firstCode." }
-        $expectedWarning = 'WARNING: Validated Microsoft WinGet (?<Version>v?\d+\.\d+(?:\.\d+){0,2}) and its official source, but this version is older than 1\.29\.'
+        $expectedWarning = 'WARNING: Validated Microsoft WinGet (?<Version>v?\d+\.\d+(?:\.\d+){0,2}) and its official source, but this version is older than 1\.29\.280\.'
         $warnings = [regex]::Matches($first.Text, "(?m)^$expectedWarning\r?$")
         if ($warnings.Count -ne 1) {
             throw 'Unsupported WinGet was not independently classified after package, signature, and official-source validation.'
         }
         Write-Host "Runner provides trusted but unsupported WinGet $($warnings[0].Groups['Version'].Value)."
-        $expectedError = 'Microsoft Desktop App Installer is trusted, but its WinGet version is older than 1\.29\. Update App Installer from Microsoft, then run this setup again\.'
+        $expectedError = 'Microsoft Desktop App Installer is trusted, but its WinGet version is older than 1\.29\.280\. Update App Installer from Microsoft, then run this setup again\.'
         $errors = [regex]::Matches($first.Text, '(?m)^\[[^\r\n]+\] ERROR: .+\r?$')
         if ($errors.Count -ne 1 -or $errors[0].Value -notmatch $expectedError) {
             throw 'Unsupported WinGet did not fail only at the expected minimum-version gate.'

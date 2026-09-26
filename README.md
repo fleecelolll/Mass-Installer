@@ -22,7 +22,7 @@ A little tool I made with AI to quickly install or update useful Windows apps to
 ## requirements
 
 - 64-bit x64 or ARM64 Windows
-- Windows Package Manager 1.29 or newer through Microsoft App Installer
+- Windows Package Manager 1.29.280 or newer through Microsoft App Installer
 - An internet connection during setup and app installation
 - Permission to install the selected Windows applications
 
@@ -71,7 +71,7 @@ If setup stops, review `setup.log`, correct the listed problem, and run `Install
 
 If the `Mass Installer` shortcut does not open, run `Installer.bat` again and keep the complete extracted folder together. Setup recreates and validates the shortcut for the folder's current location.
 
-If WinGet validation fails, install or update **App Installer** from Microsoft to WinGet 1.29 or newer and run setup again. Setup does not reset or rewrite WinGet sources.
+If WinGet validation fails, install or update **App Installer** from Microsoft to WinGet 1.29.280 or newer and run setup again. Setup does not reset or rewrite WinGet sources.
 
 ## license
 
