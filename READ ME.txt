@@ -37,7 +37,7 @@ TROUBLESHOOTING
 
 If setup or the shortcut fails, review setup.log and run Installer.bat again. Success is shown only after the dependencies, offline self-tests, and shortcut all pass. Keep the complete extracted folder together.
 
-If WinGet validation fails, install or update Microsoft App Installer to WinGet 1.29 or newer and run setup again.
+If WinGet validation fails, install or update Microsoft App Installer to WinGet 1.29.280 or newer and run setup again.
 
 LICENSE
 

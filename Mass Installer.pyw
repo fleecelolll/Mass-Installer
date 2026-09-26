@@ -20,7 +20,7 @@ from typing import Optional
 
 
 APP_TITLE = "Mass Installer"
-APP_VERSION = "1.0.11"
+APP_VERSION = "1.0.12"
 APP_DIR = Path(__file__).resolve().parent
 RUNTIME_DIR = APP_DIR / ".runtime"
 LOGS_DIR = RUNTIME_DIR / "logs"
@@ -404,7 +404,7 @@ CATEGORY_ORDER = (
     "Creative",
 )
 
-MIN_WINGET_VERSION = (1, 29)
+MIN_WINGET_VERSION = (1, 29, 280)
 
 APP_BY_ID = {app.package_id: app for app in APP_CATALOG}
 
@@ -2356,11 +2356,13 @@ exit 1
     def finish_winget_preflight(self, ready: bool, version: str):
         self.winget_version = version
         self.winget_supports_no_progress = False
-        match = re.search(r"(\d+)\.(\d+)", version)
+        match = re.fullmatch(r"v?(\d+)\.(\d+)(?:\.(\d+))?(?:\.\d+)?", version.strip())
         if match:
-            major, minor = (int(value) for value in match.groups())
+            major = int(match.group(1))
+            minor = int(match.group(2))
+            patch = int(match.group(3) or 0)
             self.winget_supports_no_progress = (major, minor) >= (1, 29)
-            if ready and (major, minor) < MIN_WINGET_VERSION:
+            if ready and (major, minor, patch) < MIN_WINGET_VERSION:
                 ready = False
                 self.preflight_label.setText("Update WinGet")
             else:
@@ -2895,7 +2897,7 @@ exit 1
 
 
 def run_self_test(application: QApplication) -> int:
-    assert APP_VERSION == "1.0.11"
+    assert APP_VERSION == "1.0.12"
     assert acquire_app_mutex()
     assert not acquire_app_mutex()
     release_app_mutex()
@@ -3260,6 +3262,10 @@ def run_self_test(application: QApplication) -> int:
     window.finish_winget_preflight(True, "v1.5.0")
     assert not window.winget_ready
     window.finish_winget_preflight(True, "v1.29.0")
+    assert not window.winget_ready
+    window.finish_winget_preflight(True, "v1.29.279")
+    assert not window.winget_ready
+    window.finish_winget_preflight(True, "v1.29.280")
     assert window.winget_ready and window.winget_supports_no_progress
     arguments = window.build_winget_arguments(APP_CATALOG[0])
     assert arguments[:3] == ["install", "--id", APP_CATALOG[0].package_id]
