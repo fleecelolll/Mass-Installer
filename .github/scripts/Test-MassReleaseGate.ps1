@@ -155,7 +155,7 @@ switch ($first.State) {
             if ($badSourceText -notmatch 'Checking bundled app source' -or $badSourceText -notmatch 'Mass Installer\.pyw is invalid or unreadable') {
                 throw 'Malformed app source did not fail at its early source check.'
             }
-            if ($badSourceText -match 'STEP 2 / 3|App components') {
+            if ($badSourceText -match '\[ STEP 2 / 3 \]') {
                 throw 'Malformed app source was discovered only after package setup began.'
             }
             if ($badSourceText -notmatch 'How to fix it:' -or $badSourceText -notmatch 'Re-extract the entire official release ZIP') {
@@ -183,7 +183,7 @@ switch ($first.State) {
             if ($missingIconText -notmatch 'Checking bundled app icons and image' -or $missingIconText -notmatch 'bundled app icons or the app image are missing or invalid') {
                 throw 'Missing icon did not fail at its early asset check.'
             }
-            if ($missingIconText -match 'STEP 2 / 3|App components') {
+            if ($missingIconText -match '\[ STEP 2 / 3 \]') {
                 throw 'Missing icon was discovered only after package setup began.'
             }
             $missingIconLog = [IO.File]::ReadAllText($log, [Text.Encoding]::UTF8)
