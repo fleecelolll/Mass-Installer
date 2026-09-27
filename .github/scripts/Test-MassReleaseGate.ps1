@@ -205,3 +205,4 @@ if ($env:GITHUB_OUTPUT) {
     [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "winget_state=$($first.State)`n", [Text.UTF8Encoding]::new($false))
 }
 Write-Host "Mass release gate passed with WinGet state: $($first.State)"
+exit 0
