@@ -8,6 +8,10 @@ set "NO_PAUSE=0"
 set "ASSUME_YES=0"
 set "SETUP_CHILD=0"
 set "LOG_READY="
+set "REPAIR_HINT="
+set "REPAIR_COMMAND="
+set "REPAIR_FALLBACK="
+set "REPAIR_LINK="
 set "DIAGNOSTIC_LOG=nul"
 set "PATHS_VALIDATED="
 set "FFMPEG_DIR="
@@ -97,6 +101,7 @@ if defined PROCESSOR_ARCHITEW6432 set "NATIVE_ARCH=%PROCESSOR_ARCHITEW6432%"
 if /I "%NATIVE_ARCH%"=="AMD64" goto ArchitectureX64
 if /I "%NATIVE_ARCH%"=="ARM64" goto ArchitectureArm64
 set "FAIL_MESSAGE=This installer currently supports 64-bit and ARM64 Windows only."
+set "REPAIR_HINT=Use a 64-bit x64 or ARM64 Windows PC. This ZIP cannot run on 32-bit Windows."
 goto Failed
 
 :ArchitectureX64
@@ -113,19 +118,23 @@ set "PYTHON_SHA256=F6773983C8959D4281E48C4540CB0BDD23E42391E4E951CE17E7CEB52658F
 :ArchitectureReady
 if not exist "%POWERSHELL_EXE%" (
     set "FAIL_MESSAGE=Trusted Windows PowerShell is missing from the system folder."
+    set "REPAIR_HINT=Run Windows Update or Windows system-file repair, then retry. Do not download PowerShell from an unofficial site."
     goto Failed
 )
 if not exist "%ROBOCOPY_EXE%" (
     set "FAIL_MESSAGE=Trusted Windows file-copy support is missing from the system folder."
+    set "REPAIR_HINT=Run Windows Update or Windows system-file repair, then retry. Do not download Robocopy from an unofficial site."
     goto Failed
 )
 if not exist "%ROOT%LICENSE" (
     set "FAIL_MESSAGE=The bundled Tool License is missing from this folder. Extract a fresh official release and try again."
+    set "REPAIR_HINT=Extract the entire official release ZIP again; keep Installer.bat and LICENSE together."
     goto Failed
 )
 "%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "if([IO.Path]::GetFullPath($env:ROOT).Length -gt [int]$env:MAX_ROOT_LENGTH){exit 2}" >nul 2>nul
 if errorlevel 1 (
     set "FAIL_MESSAGE=The complete app folder path must be 72 characters or fewer. Move the extracted folder closer to the drive root and try again."
+    set "REPAIR_HINT=Move the extracted folder to a shorter path you own, then run Installer.bat there."
     goto Failed
 )
 cls
@@ -161,17 +170,20 @@ if "%ASSUME_YES%"=="1" (
 call :ValidatePrivatePaths
 if errorlevel 1 (
     set "FAIL_MESSAGE=The app folder or one of its private setup paths is not safe to modify. Extract a fresh copy to a normal folder and try again."
+    set "REPAIR_HINT=Re-extract the whole official ZIP to a normal local folder you own, without directory links."
     goto Failed
 )
 set "PATHS_VALIDATED=1"
 call :CheckRootWritePermission
 if errorlevel 1 (
     set "FAIL_MESSAGE=Setup cannot write to this app folder. Move it to a folder owned by this Windows user and try again."
+    set "REPAIR_HINT=Move the whole extracted folder to a writable local folder you own, then retry."
     goto Failed
 )
 if not exist "%RUNTIME%" mkdir "%RUNTIME%" >nul 2>nul
 if not exist "%RUNTIME%" (
     set "FAIL_MESSAGE=Could not create the private runtime folder."
+    set "REPAIR_HINT=Check free disk space and use a writable local folder you own, then retry."
     goto Failed
 )
 call :AcquireSetupLock
@@ -181,11 +193,13 @@ if errorlevel 1 goto SetupAlreadyRunning
 if exist "%LOG%" del /f /q "%LOG%" >nul 2>nul
 if exist "%LOG%" (
     set "FAIL_MESSAGE=The previous setup log could not be replaced safely."
+    set "REPAIR_HINT=Close programs using setup.log, check folder write access, then retry."
     goto Failed
 )
 "%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$stream=[IO.File]::Open($env:LOG,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read);$stream.Dispose()" >nul 2>nul
 if errorlevel 1 (
     set "FAIL_MESSAGE=A fresh private setup log could not be created safely."
+    set "REPAIR_HINT=Check free disk space and use a writable local folder you own, then retry."
     goto Failed
 )
 set "LOG_READY=1"
@@ -193,11 +207,13 @@ set "DIAGNOSTIC_LOG=%LOG%"
 call :EnsureAppClosed
 if errorlevel 1 (
     set "FAIL_MESSAGE=Mass Installer is open. Close the app before installing or repairing its files."
+    set "REPAIR_HINT=Close Mass Installer completely, then run Installer.bat again."
     goto Failed
 )
 if not exist "%DOWNLOADS%" mkdir "%DOWNLOADS%" >>"%LOG%" 2>&1
 if not exist "%DOWNLOADS%" (
     set "FAIL_MESSAGE=Could not create the private download folder."
+    set "REPAIR_HINT=Check free disk space and folder write access, then retry."
     goto Failed
 )
 
@@ -212,6 +228,7 @@ call :LogCurrent
 
 if not exist "%APP_FILE%" (
     set "FAIL_MESSAGE=Mass Installer.pyw is missing from this folder."
+    set "REPAIR_HINT=Extract the entire official release ZIP again; do not run Installer.bat alone."
     goto Failed
 )
 
@@ -227,6 +244,13 @@ if errorlevel 1 (
 call :CheckWingetRequirement
 if errorlevel 1 goto Failed
 echo      WinGet is ready. Continuing with private app components.
+echo      Checking Windows shortcut support...
+call :CheckShortcutSupport
+if errorlevel 1 (
+    set "FAIL_MESSAGE=Windows shortcut support is unavailable, or the existing Mass Installer shortcut is unsafe. See setup.log for details."
+    set "REPAIR_HINT=Re-extract the official ZIP to a normal folder. If this repeats, ask your Windows administrator about shortcut support."
+    goto Failed
+)
 
 echo.
 echo   [ STEP 1 / 3 ]   Private Python environment
@@ -236,6 +260,7 @@ if not errorlevel 1 (
     if exist "%VENV%" call :RemoveDirectoryRobust "%VENV%"
     if exist "%VENV%" (
         set "FAIL_MESSAGE=An old .venv folder could not be removed after private Python was verified."
+        set "REPAIR_HINT=Close programs using this folder, then retry. If it repeats, extract a fresh ZIP to a new folder."
         goto Failed
     )
     echo      Existing private Python is valid. Keeping it.
@@ -260,11 +285,13 @@ echo      Downloading and preparing private Python...
 call :InstallEmbedPy
 if errorlevel 1 (
     set "FAIL_MESSAGE=Private Python could not be installed or verified."
+    set "REPAIR_HINT=Check your connection and free disk space, then retry. Use setup.log to see which download or check failed."
     goto Failed
 )
 if exist "%VENV%" call :RemoveDirectoryRobust "%VENV%"
 if exist "%VENV%" (
     set "FAIL_MESSAGE=An invalid old .venv folder could not be removed."
+    set "REPAIR_HINT=Close programs using this folder, then retry. If it repeats, extract a fresh ZIP to a new folder."
     goto Failed
 )
 set "ENV_MODE=embedded"
@@ -275,6 +302,21 @@ set "APP_PYW=%RUNTIME_PYW%"
 call :ValidateSelectedEnvironment
 if errorlevel 1 (
     set "FAIL_MESSAGE=The private Python environment did not pass validation."
+    set "REPAIR_HINT=Check free disk space and retry. If it repeats, re-extract the official ZIP to a new folder."
+    goto Failed
+)
+echo      Checking bundled app source...
+call :CompileAppSource
+if errorlevel 1 (
+    set "FAIL_MESSAGE=Mass Installer.pyw is invalid or unreadable. Re-extract the official release ZIP and run setup again."
+    set "REPAIR_HINT=Re-extract the entire official release ZIP, then rerun Installer.bat."
+    goto Failed
+)
+echo      Checking bundled app icons and image...
+call :CheckBundledAssets
+if errorlevel 1 (
+    set "FAIL_MESSAGE=One or more bundled app icons or the app image are missing or invalid."
+    set "REPAIR_HINT=Re-extract the entire official release ZIP, including its assets folder, then rerun setup."
     goto Failed
 )
 echo      Done.
@@ -292,6 +334,7 @@ if errorlevel 1 (
 call :InstallPythonPackages
 if errorlevel 1 (
     set "FAIL_MESSAGE=PySide6 could not be installed and verified."
+    set "REPAIR_HINT=Check your connection and free disk space, then retry. See setup.log for the package error."
     goto Failed
 )
 call :TouchSetupLock
@@ -322,18 +365,21 @@ if errorlevel 1 (
 )
 call :VerifyEverything
 if errorlevel 1 (
-    set "FAIL_MESSAGE=One or more final component checks failed."
+    if not defined FAIL_MESSAGE set "FAIL_MESSAGE=One or more final component checks failed."
+    if not defined REPAIR_HINT set "REPAIR_HINT=Open setup.log to identify the failed self-test, then rerun setup once. If it repeats, use a fresh official ZIP."
     goto Failed
 )
 echo      Creating the Mass Installer start shortcut...
 call :CreateShortcut
 if errorlevel 1 (
     set "FAIL_MESSAGE=The start shortcut could not be created."
+    set "REPAIR_HINT=Check folder write access and setup.log, then retry. If it repeats, extract a fresh ZIP to a new folder."
     goto Failed
 )
 call :WriteSetupMarker
 if errorlevel 1 (
     set "FAIL_MESSAGE=Setup finished its checks but could not save the completion marker."
+    set "REPAIR_HINT=Check free disk space and folder write access, then rerun setup."
     goto Failed
 )
 echo      Every check passed.
@@ -341,6 +387,7 @@ echo      Every check passed.
 if exist "%DOWNLOADS%" call :RemoveDirectoryRobust "%DOWNLOADS%"
 if exist "%DOWNLOADS%" (
     set "FAIL_MESSAGE=Setup passed its checks but could not safely remove temporary downloads."
+    set "REPAIR_HINT=Close programs scanning this folder, check folder write access, then rerun setup."
     goto Failed
 )
 set "LOG_MESSAGE=Setup completed successfully."
@@ -373,6 +420,7 @@ echo  ==================================================
 echo.
 echo   Another Mass Installer setup is already running.
 echo   Let that window finish, then try again.
+echo   If no setup window is open, restart Windows and retry.
 echo.
 call :PauseIfNeeded
 exit /b 1
@@ -392,8 +440,24 @@ exit /b 1
 
 :Failed
 if not defined FAIL_MESSAGE set "FAIL_MESSAGE=Setup stopped because an unexpected error occurred."
+if "%FAIL_MESSAGE%"=="Setup lost ownership of its private setup lock." set "REPAIR_HINT=Close any other setup window and retry. If none is open, restart Windows first."
+if not defined REPAIR_HINT set "REPAIR_HINT=Review the detailed log, then retry from a fresh official ZIP in a writable local folder."
 set "LOG_MESSAGE=ERROR: %FAIL_MESSAGE%"
 if defined LOG_READY call :LogCurrent
+set "LOG_MESSAGE=HOW_TO_FIX: %REPAIR_HINT%"
+if defined LOG_READY call :LogCurrent
+if defined REPAIR_COMMAND (
+    set "LOG_MESSAGE=HOW_TO_FIX_COMMAND: %REPAIR_COMMAND%"
+    if defined LOG_READY call :LogCurrent
+)
+if defined REPAIR_FALLBACK (
+    set "LOG_MESSAGE=HOW_TO_FIX_FALLBACK: %REPAIR_FALLBACK%"
+    if defined LOG_READY call :LogCurrent
+)
+if defined REPAIR_LINK (
+    set "LOG_MESSAGE=HOW_TO_FIX_LINK: %REPAIR_LINK%"
+    if defined LOG_READY call :LogCurrent
+)
 if defined PATHS_VALIDATED call :ReleaseSetupLock
 echo.
 echo  ==================================================
@@ -401,6 +465,12 @@ echo                     SETUP STOPPED
 echo  ==================================================
 echo.
 echo   %FAIL_MESSAGE%
+echo.
+echo   How to fix it:
+echo      %REPAIR_HINT%
+if defined REPAIR_COMMAND echo      %REPAIR_COMMAND%
+if defined REPAIR_FALLBACK echo      %REPAIR_FALLBACK%
+if defined REPAIR_LINK echo      %REPAIR_LINK%
 echo.
 echo   No success was reported because all checks did not pass.
 if defined LOG_READY (
@@ -820,17 +890,27 @@ set "WINGET_CHECK_CODE=%ERRORLEVEL%"
 if "%WINGET_CHECK_CODE%"=="0" exit /b 0
 if "%WINGET_CHECK_CODE%"=="20" (
     set "FAIL_MESSAGE=Microsoft Desktop App Installer is not registered for this Windows user. Install or update App Installer from Microsoft, then run this setup again."
+    set "REPAIR_HINT=Install or update App Installer from Microsoft Store, reopen your terminal, then retry."
+    set "REPAIR_LINK=https://apps.microsoft.com/detail/9nblggh4nns1"
     exit /b 1
 )
 if "%WINGET_CHECK_CODE%"=="21" (
     set "FAIL_MESSAGE=Microsoft Desktop App Installer is present, but WinGet failed trusted package, signature, version, or official-source validation. Repair or update App Installer from Microsoft, then run this setup again."
+    set "REPAIR_HINT=In Windows Settings, find App Installer and choose Repair. Then update it in Microsoft Store."
+    set "REPAIR_LINK=https://apps.microsoft.com/detail/9nblggh4nns1"
     exit /b 1
 )
 if "%WINGET_CHECK_CODE%"=="23" (
     set "FAIL_MESSAGE=Microsoft Desktop App Installer is trusted, but its WinGet version is older than 1.29.280. Update App Installer from Microsoft, then run this setup again."
+    set "REPAIR_HINT=Open a normal PowerShell or Command Prompt and run:"
+    set "REPAIR_COMMAND=winget upgrade Microsoft.AppInstaller"
+    set "REPAIR_FALLBACK=Then reopen the terminal and retry. If it fails, use the Microsoft Store link:"
+    set "REPAIR_LINK=https://apps.microsoft.com/detail/9nblggh4nns1"
     exit /b 1
 )
 set "FAIL_MESSAGE=Trusted WinGet validation could not finish safely. Review setup.log, repair or update App Installer from Microsoft, then run this setup again."
+set "REPAIR_HINT=Review setup.log, then update or repair App Installer from Microsoft. If it repeats, use a fresh official ZIP."
+set "REPAIR_LINK=https://apps.microsoft.com/detail/9nblggh4nns1"
 exit /b 1
 
 :ValidateWinget
@@ -890,22 +970,71 @@ call :LogCurrent
 exit /b 22
 
 :VerifyEverything
-if not defined APP_PY exit /b 1
-if not defined APP_PYW exit /b 1
-if not exist "%APP_PY%" exit /b 1
-if not exist "%APP_PYW%" exit /b 1
+if not defined APP_PY goto FinalPythonFailed
+if not defined APP_PYW goto FinalPythonFailed
+if not exist "%APP_PY%" goto FinalPythonFailed
+if not exist "%APP_PYW%" goto FinalPythonFailed
 call :ValidateSelectedEnvironment
-if errorlevel 1 exit /b 1
+if errorlevel 1 goto FinalPythonFailed
 call :VerifyPythonPackages
-if errorlevel 1 exit /b 1
-if not "%WINGET_VALIDATED%"=="1" exit /b 1
-if not "%WINGET_STATE%"=="trusted" exit /b 1
+if errorlevel 1 goto FinalPackagesFailed
+if not "%WINGET_VALIDATED%"=="1" goto FinalWingetFailed
+if not "%WINGET_STATE%"=="trusted" goto FinalWingetFailed
 
-"%APP_PY%" -I -c "import os; from pathlib import Path; app=Path(os.environ['APP_FILE']); assert app.is_file(); compile(app.read_text(encoding='utf-8'), str(app), 'exec'); print('Application source compiled successfully.')" >>"%LOG%" 2>&1
-if errorlevel 1 exit /b 1
+call :CompileAppSource
+if errorlevel 1 goto FinalSourceFailed
+call :CheckBundledAssets
+if errorlevel 1 goto FinalAssetsFailed
 "%APP_PY%" -I "%APP_FILE%" --self-test >>"%LOG%" 2>&1
-if errorlevel 1 exit /b 1
+if errorlevel 1 goto FinalSelfTestFailed
 exit /b 0
+
+:FinalPythonFailed
+set "FAIL_MESSAGE=Private Python failed its final verification."
+set "REPAIR_HINT=Close other programs using this folder, check free disk space, then rerun setup."
+exit /b 1
+
+:FinalPackagesFailed
+set "FAIL_MESSAGE=PySide6 failed its final verification."
+set "REPAIR_HINT=Rerun setup with a working connection. See setup.log for the package check that failed."
+exit /b 1
+
+:FinalWingetFailed
+set "FAIL_MESSAGE=WinGet failed its final verification."
+set "REPAIR_HINT=Update or repair App Installer from Microsoft Store, then rerun setup."
+set "REPAIR_LINK=https://apps.microsoft.com/detail/9nblggh4nns1"
+exit /b 1
+
+:FinalSourceFailed
+set "FAIL_MESSAGE=Mass Installer.pyw changed or became unreadable during setup."
+set "REPAIR_HINT=Re-extract the entire official release ZIP, then rerun setup."
+exit /b 1
+
+:FinalAssetsFailed
+set "FAIL_MESSAGE=Bundled app icons or image failed final verification."
+set "REPAIR_HINT=Re-extract the entire official release ZIP, including its assets folder, then rerun setup."
+exit /b 1
+
+:FinalSelfTestFailed
+set "FAIL_MESSAGE=The Mass Installer app self-test failed."
+set "REPAIR_HINT=See the last self-test error in setup.log, then rerun setup once. If it repeats, use a fresh official ZIP."
+exit /b 1
+
+:CompileAppSource
+if not defined APP_PY exit /b 1
+if not exist "%APP_PY%" exit /b 1
+"%APP_PY%" -I -c "import os; from pathlib import Path; app=Path(os.environ['APP_FILE']); assert app.is_file(); compile(app.read_text(encoding='utf-8'), str(app), 'exec'); print('Application source compiled successfully.')" >>"%LOG%" 2>&1
+exit /b %ERRORLEVEL%
+
+:CheckBundledAssets
+if not defined APP_PY exit /b 1
+if not exist "%APP_PY%" exit /b 1
+"%APP_PY%" -I -c "import ast, os, re, xml.etree.ElementTree as ET; from pathlib import Path; app=Path(os.environ['APP_FILE']); tree=ast.parse(app.read_text(encoding='utf-8')); assignments=[s.value for s in tree.body if isinstance(s,ast.Assign) for t in s.targets if isinstance(t,ast.Name) and t.id=='ICON_SLUG_BY_PACKAGE']; assert len(assignments)==1, 'Missing icon mapping'; icons=ast.literal_eval(assignments[0]); assert isinstance(icons,dict) and len(icons)==49, 'Unexpected icon mapping'; assert all(isinstance(s,str) and re.fullmatch(r'[a-z0-9]+',s) for s in icons.values()), 'Invalid icon slug'; assets=app.parent/'assets'; folder=assets/'app-icons'; assert assets.is_dir() and not assets.is_symlink() and folder.is_dir() and not folder.is_symlink(), 'Missing or linked icon folder'; files=[folder/(s+'.svg') for s in icons.values()]; bad=[p.name for p in files if not p.is_file() or p.is_symlink() or p.stat().st_size<1]; assert not bad, 'Missing or unsafe icons: '+', '.join(bad); [ET.parse(p) for p in files]; image=app.parent/'Mass Installer.png'; assert image.is_file() and not image.is_symlink() and image.stat().st_size>0, 'Missing or unsafe app image'; print('Bundled app icons and image passed preflight.')" >>"%LOG%" 2>&1
+exit /b %ERRORLEVEL%
+
+:CheckShortcutSupport
+"%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop';$path=Join-Path $env:ROOT 'Mass Installer.lnk';if(Test-Path -LiteralPath $path){$item=Get-Item -LiteralPath $path -Force;if($item.PSIsContainer-or($item.Attributes-band[IO.FileAttributes]::ReparsePoint)){throw 'The existing Mass Installer shortcut is not a normal file.'}};$shell=New-Object -ComObject WScript.Shell;if(-not $shell){throw 'Windows shortcut COM support is unavailable.'};$probe=Join-Path $env:RUNTIME ('shortcut-preflight-'+[Guid]::NewGuid().ToString('N')+'.lnk');try{$link=$shell.CreateShortcut($probe);$link.TargetPath=$env:POWERSHELL_EXE;$link.WorkingDirectory=$env:RUNTIME;$link.Save();if(-not(Test-Path -LiteralPath $probe -PathType Leaf)){throw 'Windows did not save a test shortcut.'};$readback=$shell.CreateShortcut($probe);if([IO.Path]::GetFullPath($readback.TargetPath) -ine [IO.Path]::GetFullPath($env:POWERSHELL_EXE)){throw 'Windows did not preserve the test shortcut target.'}}finally{if(Test-Path -LiteralPath $probe){Remove-Item -LiteralPath $probe -Force}};Write-Output 'Windows shortcut creation and readback passed preflight.'" >>"%LOG%" 2>&1
+exit /b %ERRORLEVEL%
 
 :CreateShortcut
 set "LINK_PATH=%ROOT%Mass Installer.lnk"

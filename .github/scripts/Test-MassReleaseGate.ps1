@@ -139,8 +139,61 @@ switch ($first.State) {
         if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) { throw 'Trusted setup did not publish the setup marker.' }
         if (-not (Test-Path -LiteralPath $shortcut -PathType Leaf)) { throw 'Trusted setup did not publish the app shortcut.' }
         if ($first.Text -notmatch '(?m)^\[[^\r\n]+\] Setup completed successfully\.\r?$') { throw 'Trusted setup did not log successful completion.' }
+        if ($first.Text -notmatch 'Windows shortcut creation and readback passed preflight\.') { throw 'Trusted setup skipped the shortcut creation preflight.' }
         Assert-TrustedCache
         Assert-PrivateRuntime
+
+        $originalApp = [IO.File]::ReadAllBytes($app)
+        try {
+            [IO.File]::WriteAllBytes($app, [Text.Encoding]::UTF8.GetBytes('def :'))
+            $badSourceCommand = 'call "{0}" --yes --no-pause' -f $installer
+            $badSourceOutput = @(& $cmd /d /c $badSourceCommand 2>&1)
+            $badSourceCode = $LASTEXITCODE
+            $badSourceText = $badSourceOutput | Out-String
+            Write-Host $badSourceText
+            if ($badSourceCode -ne 1) { throw "Malformed app source returned exit code $badSourceCode instead of 1." }
+            if ($badSourceText -notmatch 'Checking bundled app source' -or $badSourceText -notmatch 'Mass Installer\.pyw is invalid or unreadable') {
+                throw 'Malformed app source did not fail at its early source check.'
+            }
+            if ($badSourceText -match 'STEP 2 / 3|App components') {
+                throw 'Malformed app source was discovered only after package setup began.'
+            }
+            if ($badSourceText -notmatch 'How to fix it:' -or $badSourceText -notmatch 'Re-extract the entire official release ZIP') {
+                throw 'The early source failure did not display its repair instructions.'
+            }
+            $badSourceLog = [IO.File]::ReadAllText($log, [Text.Encoding]::UTF8)
+            if ($badSourceLog -notmatch 'SyntaxError' -or $badSourceLog -notmatch 'HOW_TO_FIX: Re-extract the entire official release ZIP' -or $badSourceLog -match 'Setup completed successfully\.') {
+                throw 'The early source failure log is missing the cause or repair instructions, or falsely reports success.'
+            }
+            Assert-OutcomeSequence (Read-SetupOutcome) @('trusted')
+        } finally {
+            [IO.File]::WriteAllBytes($app, $originalApp)
+        }
+
+        $testIcon = Join-Path $root 'assets\app-icons\googlechrome.svg'
+        $originalIcon = [IO.File]::ReadAllBytes($testIcon)
+        try {
+            [IO.File]::Delete($testIcon)
+            $missingIconCommand = 'call "{0}" --yes --no-pause' -f $installer
+            $missingIconOutput = @(& $cmd /d /c $missingIconCommand 2>&1)
+            $missingIconCode = $LASTEXITCODE
+            $missingIconText = $missingIconOutput | Out-String
+            Write-Host $missingIconText
+            if ($missingIconCode -ne 1) { throw "Missing icon returned exit code $missingIconCode instead of 1." }
+            if ($missingIconText -notmatch 'Checking bundled app icons and image' -or $missingIconText -notmatch 'bundled app icons or the app image are missing or invalid') {
+                throw 'Missing icon did not fail at its early asset check.'
+            }
+            if ($missingIconText -match 'STEP 2 / 3|App components') {
+                throw 'Missing icon was discovered only after package setup began.'
+            }
+            $missingIconLog = [IO.File]::ReadAllText($log, [Text.Encoding]::UTF8)
+            if ($missingIconLog -notmatch 'Missing or unsafe icons: googlechrome\.svg' -or $missingIconLog -notmatch 'HOW_TO_FIX: Re-extract the entire official release ZIP, including its assets folder' -or $missingIconLog -match 'Setup completed successfully\.') {
+                throw 'The early missing-icon log is missing the cause or repair instructions, or falsely reports success.'
+            }
+            Assert-OutcomeSequence (Read-SetupOutcome) @('trusted')
+        } finally {
+            [IO.File]::WriteAllBytes($testIcon, $originalIcon)
+        }
 
         $repairCode = Invoke-Setup
         if ($repairCode -ne 0) { throw "Trusted WinGet repair failed with exit code $repairCode." }
@@ -162,6 +215,9 @@ switch ($first.State) {
         $errors = [regex]::Matches($first.Text, '(?m)^\[[^\r\n]+\] ERROR: .+\r?$')
         if ($errors.Count -ne 1 -or $errors[0].Value -notmatch $expectedError) {
             throw 'Exact package absence did not fail only at the expected WinGet gate.'
+        }
+        if ($first.Text -notmatch 'HOW_TO_FIX: Install or update App Installer from Microsoft Store' -or $first.Text -notmatch 'HOW_TO_FIX_LINK: https://apps\.microsoft\.com/detail/9nblggh4nns1') {
+            throw 'Absent App Installer did not include its specific repair instructions.'
         }
         if ($first.Text -match '(?m)^\[[^\r\n]+\] Setup completed successfully\.\r?$') { throw 'Absent-package setup falsely logged success.' }
         foreach ($path in @($marker, $shortcut, $cache, $lock)) {
@@ -189,6 +245,9 @@ switch ($first.State) {
         $errors = [regex]::Matches($first.Text, '(?m)^\[[^\r\n]+\] ERROR: .+\r?$')
         if ($errors.Count -ne 1 -or $errors[0].Value -notmatch $expectedError) {
             throw 'Unsupported WinGet did not fail only at the expected minimum-version gate.'
+        }
+        if ($first.Text -notmatch 'HOW_TO_FIX_COMMAND: winget upgrade Microsoft\.AppInstaller' -or $first.Text -notmatch 'HOW_TO_FIX_LINK: https://apps\.microsoft\.com/detail/9nblggh4nns1') {
+            throw 'Outdated WinGet did not include its specific upgrade command and fallback.'
         }
         if ($first.Text -match '(?m)^\[[^\r\n]+\] Setup completed successfully\.\r?$') { throw 'Unsupported WinGet setup falsely logged success.' }
         foreach ($path in @($marker, $shortcut, $cache, $lock)) {
