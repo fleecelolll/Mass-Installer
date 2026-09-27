@@ -216,6 +216,19 @@ if not exist "%APP_FILE%" (
 )
 
 echo.
+echo   [ PREFLIGHT ]   Windows Package Manager
+echo.
+echo      Checking the trusted Microsoft package, source, and version...
+call :TouchSetupLock
+if errorlevel 1 (
+    set "FAIL_MESSAGE=Setup lost ownership of its private setup lock."
+    goto Failed
+)
+call :CheckWingetRequirement
+if errorlevel 1 goto Failed
+echo      WinGet is ready. Continuing with private app components.
+
+echo.
 echo   [ STEP 1 / 3 ]   Private Python environment
 echo.
 call :ValidateEmbeddedPython
@@ -297,23 +310,8 @@ if errorlevel 1 (
     set "FAIL_MESSAGE=Setup lost ownership of its private setup lock."
     goto Failed
 )
-call :ValidateWinget
-set "WINGET_CHECK_CODE=%ERRORLEVEL%"
-if "%WINGET_CHECK_CODE%"=="0" goto WingetReady
-if "%WINGET_CHECK_CODE%"=="20" (
-    set "FAIL_MESSAGE=Microsoft Desktop App Installer is not registered for this Windows user. Install or update App Installer from Microsoft, then run this setup again."
-    goto Failed
-)
-if "%WINGET_CHECK_CODE%"=="21" (
-    set "FAIL_MESSAGE=Microsoft Desktop App Installer is present, but WinGet failed trusted package, signature, version, or official-source validation. Repair or update App Installer from Microsoft, then run this setup again."
-    goto Failed
-)
-if "%WINGET_CHECK_CODE%"=="23" (
-    set "FAIL_MESSAGE=Microsoft Desktop App Installer is trusted, but its WinGet version is older than 1.29.280. Update App Installer from Microsoft, then run this setup again."
-    goto Failed
-)
-set "FAIL_MESSAGE=Trusted WinGet validation could not finish safely. Review setup.log, repair or update App Installer from Microsoft, then run this setup again."
-goto Failed
+call :CheckWingetRequirement
+if errorlevel 1 goto Failed
 
 :WingetReady
 echo      Testing every required component without installing apps...
@@ -815,6 +813,25 @@ exit /b %ERRORLEVEL%
 :ValidateTrustedWingetCache
 "%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop';$runtime=[IO.Path]::GetFullPath($env:RUNTIME).TrimEnd('\');$cache=[IO.Path]::GetFullPath($env:TRUSTED_WINGET_PATH);if($cache-cne(Join-Path $runtime 'trusted-winget-path.txt')){throw 'The WinGet cache escaped its fixed runtime filename.'};$item=Get-Item -LiteralPath $cache -Force;if($item.PSIsContainer-or($item.Attributes-band[IO.FileAttributes]::ReparsePoint)-or-not[IO.File]::Exists($item.FullName)-or$item.Length-lt1-or$item.Length-gt32768){throw 'The WinGet cache is not a normal bounded file.'};$bytes=[IO.File]::ReadAllBytes($item.FullName);if($bytes.Length-ge3-and$bytes[0]-eq0xEF-and$bytes[1]-eq0xBB-and$bytes[2]-eq0xBF){throw 'The WinGet cache must not contain a UTF-8 BOM.'};$text=[Text.UTF8Encoding]::new($false,$true).GetString($bytes);if($text.IndexOfAny([char[]](13,10,0))-ge0-or[string]::IsNullOrWhiteSpace($text)){throw 'The WinGet cache content is malformed.'};$target=[IO.Path]::GetFullPath($text);if($target-cne$text-or[IO.Path]::GetFileName($target)-cne'winget.exe'){throw 'The cached WinGet path is not one exact absolute executable path.'};$winget=Get-Item -LiteralPath $target -Force;if($winget.PSIsContainer-or($winget.Attributes-band[IO.FileAttributes]::ReparsePoint)-or-not[IO.File]::Exists($winget.FullName)-or$winget.Length-gt32MB){throw 'The cached WinGet target is not a normal bounded file.'};$programFiles=[IO.Path]::GetFullPath([Environment]::GetFolderPath('ProgramFiles')).TrimEnd('\');$windowsApps=Join-Path $programFiles 'WindowsApps';$packageRoot=[IO.Path]::GetDirectoryName($target);if([IO.Path]::GetDirectoryName($packageRoot)-ine$windowsApps){throw 'The cached WinGet target is outside a direct WindowsApps package.'};$package=Get-Item -LiteralPath $packageRoot -Force;if(-not$package.PSIsContainer-or($package.Attributes-band[IO.FileAttributes]::ReparsePoint)){throw 'The cached WinGet package root is unsafe.'};$manifest=Get-Item -LiteralPath (Join-Path $packageRoot 'AppxManifest.xml') -Force;if($manifest.PSIsContainer-or($manifest.Attributes-band[IO.FileAttributes]::ReparsePoint)-or$manifest.Length-gt4MB){throw 'The cached WinGet package manifest is unsafe.'}" >>"%LOG%" 2>&1
 exit /b %ERRORLEVEL%
+
+:CheckWingetRequirement
+call :ValidateWinget
+set "WINGET_CHECK_CODE=%ERRORLEVEL%"
+if "%WINGET_CHECK_CODE%"=="0" exit /b 0
+if "%WINGET_CHECK_CODE%"=="20" (
+    set "FAIL_MESSAGE=Microsoft Desktop App Installer is not registered for this Windows user. Install or update App Installer from Microsoft, then run this setup again."
+    exit /b 1
+)
+if "%WINGET_CHECK_CODE%"=="21" (
+    set "FAIL_MESSAGE=Microsoft Desktop App Installer is present, but WinGet failed trusted package, signature, version, or official-source validation. Repair or update App Installer from Microsoft, then run this setup again."
+    exit /b 1
+)
+if "%WINGET_CHECK_CODE%"=="23" (
+    set "FAIL_MESSAGE=Microsoft Desktop App Installer is trusted, but its WinGet version is older than 1.29.280. Update App Installer from Microsoft, then run this setup again."
+    exit /b 1
+)
+set "FAIL_MESSAGE=Trusted WinGet validation could not finish safely. Review setup.log, repair or update App Installer from Microsoft, then run this setup again."
+exit /b 1
 
 :ValidateWinget
 set "WINGET_VALIDATED=0"

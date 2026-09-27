@@ -12,6 +12,7 @@ INSTALL
 6. Double-click the Mass Installer shortcut created in the folder.
 
 Keep the full extracted folder path at 72 characters or fewer so Windows can install the private packages reliably.
+Before downloading, run winget --version in PowerShell or Command Prompt. Update Microsoft App Installer first if WinGet is older than v1.29.280.
 
 USE
 
@@ -37,7 +38,7 @@ TROUBLESHOOTING
 
 If setup or the shortcut fails, review setup.log and run Installer.bat again. Success is shown only after the dependencies, offline self-tests, and shortcut all pass. Keep the complete extracted folder together.
 
-If WinGet validation fails, install or update Microsoft App Installer to WinGet 1.29.280 or newer and run setup again.
+If WinGet validation fails, install or update Microsoft App Installer to WinGet 1.29.280 or newer and run setup again. Microsoft guidance: https://learn.microsoft.com/en-us/windows/msix/app-installer/install-update-app-installer . Setup checks WinGet before downloading private Python packages and again before success.
 
 LICENSE
 

@@ -26,6 +26,8 @@ A little tool I made with AI to quickly install or update useful Windows apps to
 - An internet connection during setup and app installation
 - Permission to install the selected Windows applications
 
+Before downloading, run `winget --version` in PowerShell or Command Prompt. If it is older than `v1.29.280`, update Microsoft's App Installer first. This minimum includes Microsoft's stable fix for [CVE-2026-68821](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-68821/); setup will not bypass it.
+
 ## installation
 
 1. Download the latest release ZIP.
@@ -71,7 +73,7 @@ If setup stops, review `setup.log`, correct the listed problem, and run `Install
 
 If the `Mass Installer` shortcut does not open, run `Installer.bat` again and keep the complete extracted folder together. Setup recreates and validates the shortcut for the folder's current location.
 
-If WinGet validation fails, install or update **App Installer** from Microsoft to WinGet 1.29.280 or newer and run setup again. Setup does not reset or rewrite WinGet sources.
+If WinGet validation fails, [install or update App Installer using Microsoft's guidance](https://learn.microsoft.com/en-us/windows/msix/app-installer/install-update-app-installer), confirm `winget --version` is at least `v1.29.280`, then run setup again. Setup checks this before downloading its private Python packages and checks again before it reports success. It does not reset or rewrite WinGet sources.
 
 ## license
 
