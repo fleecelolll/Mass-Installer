@@ -8,6 +8,31 @@ Set-StrictMode -Version 3
 
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..')).TrimEnd('\')
 $output = [IO.Path]::GetFullPath($OutputPath)
+
+function Read-TrackedBlob([string]$RelativePath) {
+    $start = [Diagnostics.ProcessStartInfo]::new('git')
+    $start.WorkingDirectory = $root
+    $start.ArgumentList.Add('cat-file')
+    $start.ArgumentList.Add('blob')
+    $start.ArgumentList.Add("HEAD:$RelativePath")
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    $process = [Diagnostics.Process]::Start($start)
+    try {
+        $buffer = [IO.MemoryStream]::new()
+        try {
+            $process.StandardOutput.BaseStream.CopyTo($buffer)
+            $process.WaitForExit()
+            if ($process.ExitCode -ne 0) {
+                throw ('Could not read committed release input {0}: {1}' -f $RelativePath, $process.StandardError.ReadToEnd())
+            }
+            return ,$buffer.ToArray()
+        } finally { $buffer.Dispose() }
+    } finally { $process.Dispose() }
+}
+
 $outputDirectory = [IO.Path]::GetDirectoryName($output)
 if (-not [IO.Directory]::Exists($outputDirectory)) {
     throw "Output directory does not exist: $outputDirectory"
@@ -25,8 +50,7 @@ try {
     $commit = (& git rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the release commit.' }
 
-    $app = Join-Path $root 'Mass Installer.pyw'
-    $versionMatch = [regex]::Match([IO.File]::ReadAllText($app), '(?m)^APP_VERSION = "(?<version>\d+\.\d+\.\d+)"\s*$')
+    $versionMatch = [regex]::Match([Text.Encoding]::UTF8.GetString((Read-TrackedBlob 'Mass Installer.pyw')), '(?m)^APP_VERSION = "(?<version>\d+\.\d+\.\d+)"\s*$')
     if (-not $versionMatch.Success) { throw 'The app has no unambiguous release version.' }
     $version = $versionMatch.Groups['version'].Value
     if ([IO.Path]::GetFileName($output) -cne "Mass-Installer-v$version.zip") {
@@ -42,12 +66,25 @@ try {
     if ($paths.Count -ne 54 -or (@($paths | Select-Object -Unique)).Count -ne 54) {
         throw 'The release file list is incomplete or contains duplicates.'
     }
+    $committed = @{}
     foreach ($relative in $paths) {
         $path = Join-Path $root ($relative.Replace('/', '\'))
         $item = Get-Item -LiteralPath $path -Force
         if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $item.Length -lt 1) {
             throw "Release input is missing, empty, or unsafe: $relative"
         }
+        $blob = [byte[]](Read-TrackedBlob $relative)
+        if ($relative -eq 'Installer.bat') {
+            # Git stores LF, while .gitattributes requires a Windows CRLF batch file.
+            # Make that conversion explicit so different checkout settings cannot alter the ZIP.
+            $batchText = [Text.UTF8Encoding]::new($false, $true).GetString($blob)
+            if ($batchText.Contains([char]13)) { throw 'The committed installer batch file has unexpected CR bytes.' }
+            $blob = [Text.UTF8Encoding]::new($false).GetBytes(
+                $batchText.Replace([string][char]10, ([string][char]13 + [string][char]10))
+            )
+        }
+        if ($blob.Length -lt 1) { throw "Committed release input is empty: $relative" }
+        $committed[$relative] = $blob
     }
 
     Add-Type -AssemblyName System.IO.Compression
@@ -59,11 +96,11 @@ try {
             foreach ($relative in $paths) {
                 $entry = $archive.CreateEntry($relative, [IO.Compression.CompressionLevel]::Optimal)
                 $entry.LastWriteTime = $stamp
-                $source = [IO.File]::OpenRead((Join-Path $root ($relative.Replace('/', '\'))))
+                $target = $entry.Open()
                 try {
-                    $target = $entry.Open()
-                    try { $source.CopyTo($target) } finally { $target.Dispose() }
-                } finally { $source.Dispose() }
+                    $bytes = [byte[]]$committed[$relative]
+                    $target.Write($bytes, 0, $bytes.Length)
+                } finally { $target.Dispose() }
             }
         } finally { $archive.Dispose() }
     } finally { $stream.Dispose() }
@@ -75,8 +112,7 @@ try {
             throw 'The completed archive entry list does not match the release file list.'
         }
         foreach ($entry in $check.Entries) {
-            $sourcePath = Join-Path $root ($entry.FullName.Replace('/', '\'))
-            $sourceHash = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash
+            $sourceHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([byte[]]$committed[$entry.FullName]))
             $entryStream = $entry.Open()
             try {
                 $sha = [Security.Cryptography.SHA256]::Create()
