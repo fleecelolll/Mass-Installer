@@ -1,0 +1,89 @@
+name: Windows 11 ARM real catalog smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-real-catalog-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-catalog-install:
+    name: Windows 11 ARM real Process Explorer install
+    runs-on: windows-11-arm
+    timeout-minutes: 25
+    env:
+      PYTHONNOUSERSITE: "1"
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Build and freshly extract the release ZIP
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'Mass-Installer-v1.0.13.zip'
+          $releaseRoot = Join-Path $env:RUNNER_TEMP 'mass-real-qa'
+          if ((Test-Path -LiteralPath $archive) -or (Test-Path -LiteralPath $releaseRoot)) {
+            throw 'The release test paths must start empty.'
+          }
+          & './scripts/Build-ReleaseZip.ps1' -OutputPath $archive
+          Expand-Archive -LiteralPath $archive -DestinationPath $releaseRoot
+          [IO.File]::AppendAllText($env:GITHUB_ENV, "FLEECE_RELEASE_ROOT=$releaseRoot`n", [Text.UTF8Encoding]::new($false))
+
+      - name: Reject an overlong release folder before downloads
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'Mass-Installer-v1.0.13.zip'
+          $longRoot = Join-Path $env:RUNNER_TEMP ('mass-installer-long-path-check-' + ('x' * 55))
+          if ($longRoot.Length -le 72) { throw 'The negative-test path is not long enough.' }
+          if (Test-Path -LiteralPath $longRoot) { throw 'The negative-test path must start empty.' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $longRoot
+          $installer = Join-Path $longRoot 'Installer.bat'
+          $command = 'call "{0}" --yes --no-pause' -f $installer
+          $PSNativeCommandUseErrorActionPreference = $false
+          $output = @(& "$env:SystemRoot\System32\cmd.exe" /d /c $command 2>&1)
+          $code = $LASTEXITCODE
+          $text = $output | Out-String
+          Write-Host $text
+          if ($code -ne 1 -or $text -notmatch 'app folder path must be 72 characters or fewer' -or $text -notmatch 'How to fix it:') {
+            throw "Overlong path did not fail early with repair guidance (exit $code)."
+          }
+          if (Test-Path -LiteralPath (Join-Path $longRoot '.runtime')) {
+            throw 'Overlong path check ran after private runtime creation.'
+          }
+          exit 0
+
+      - name: Install the exact ZIP on the disposable runner
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:FLEECE_RELEASE_ROOT 'Installer.bat'
+          $command = 'call "{0}" --yes --no-pause' -f $installer
+          & "$env:SystemRoot\System32\cmd.exe" /d /c $command
+          if ($LASTEXITCODE -ne 0) { throw "Release ZIP setup failed with exit $LASTEXITCODE." }
+
+      - name: Select, review, install, and verify a real catalog app
+        shell: pwsh
+        run: |
+          $python = Join-Path $env:FLEECE_RELEASE_ROOT '.runtime\python\python.exe'
+          & $python -I '.github/scripts/Test-RealCatalogInstall.py' $env:FLEECE_RELEASE_ROOT
+          if ($LASTEXITCODE -ne 0) { throw "Real catalog workflow failed with exit $LASTEXITCODE." }
+
+      - name: Upload diagnostics if the smoke fails
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: real-catalog-diagnostics-${{ github.run_id }}
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/mass-real-qa/setup.log
+            ${{ runner.temp }}/mass-real-qa/.runtime/error.log
+            ${{ runner.temp }}/mass-real-qa/.runtime/logs/*.log

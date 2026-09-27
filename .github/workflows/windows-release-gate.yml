@@ -35,12 +35,26 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Build and freshly extract the exact ARM64 release ZIP
+        if: matrix.runner == 'windows-11-arm'
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'Mass-Installer-v1.0.13.zip'
+          $releaseRoot = Join-Path $env:RUNNER_TEMP 'mass release qa'
+          if ((Test-Path -LiteralPath $archive) -or (Test-Path -LiteralPath $releaseRoot)) {
+            throw 'The release test paths must start empty.'
+          }
+          & './scripts/Build-ReleaseZip.ps1' -OutputPath $archive
+          Expand-Archive -LiteralPath $archive -DestinationPath $releaseRoot
+          [IO.File]::AppendAllText($env:GITHUB_ENV, "FLEECE_RELEASE_ROOT=$releaseRoot`n", [Text.UTF8Encoding]::new($false))
+
       - name: Run the native setup release gate
         id: native-setup
         shell: powershell
         env:
           FLEECE_ALLOW_TRUSTED_OLD_WINGET: ${{ matrix.runner == 'windows-2025' && '1' || '0' }}
-        run: '& ".github/scripts/Test-MassReleaseGate.ps1"'
+          FLEECE_REQUIRE_TRUSTED_WINGET: ${{ matrix.runner == 'windows-11-arm' && '1' || '0' }}
+        run: '& ".github/scripts/Test-MassReleaseGate.ps1" -ReleaseRoot $env:FLEECE_RELEASE_ROOT'
 
       - name: Upload diagnostics if a gate fails
         if: failure()
@@ -54,3 +68,6 @@ jobs:
             setup.log
             .runtime/error.log
             .runtime/logs/*.log
+            ${{ runner.temp }}/mass release qa/setup.log
+            ${{ runner.temp }}/mass release qa/.runtime/error.log
+            ${{ runner.temp }}/mass release qa/.runtime/logs/*.log

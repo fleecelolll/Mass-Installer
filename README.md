@@ -26,6 +26,8 @@ A little tool I made with AI to quickly install or update useful Windows apps to
 - An internet connection during setup and app installation
 - Permission to install the selected Windows applications
 
+Before downloading, run `winget --version` in PowerShell or Command Prompt. If it is older than `v1.29.280`, update Microsoft's App Installer first. This minimum includes Microsoft's stable fix for [CVE-2026-68821](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-68821/); setup will not bypass it.
+
 ## installation
 
 1. Download the latest release ZIP.
@@ -67,11 +69,11 @@ To remove Mass Installer, close it and delete the extracted folder. This removes
 
 ## troubleshooting
 
-If setup stops, review `setup.log`, correct the listed problem, and run `Installer.bat` again. Setup reports success only after its dependencies, offline self-tests, and shortcut all pass.
+If setup stops, the window shows the failed check and a short **How to fix it** instruction immediately. The same instruction and technical cause are saved in `setup.log`; review the log for local paths before sharing it. WinGet and Windows shortcut checks run before downloads. App source and bundled assets are checked as soon as private Python is ready, before PySide6 installation. Download, package, and runtime failures stop setup when their step fails. Setup reports success only after its dependencies, offline self-tests, and shortcut all pass.
 
 If the `Mass Installer` shortcut does not open, run `Installer.bat` again and keep the complete extracted folder together. Setup recreates and validates the shortcut for the folder's current location.
 
-If WinGet validation fails, install or update **App Installer** from Microsoft to WinGet 1.29.280 or newer and run setup again. Setup does not reset or rewrite WinGet sources.
+If a trusted WinGet is merely outdated, open a normal PowerShell or Command Prompt and run Microsoft's `winget upgrade Microsoft.AppInstaller`. If WinGet is missing or that command fails, [install or update App Installer from Microsoft Store](https://apps.microsoft.com/detail/9nblggh4nns1). If App Installer is present but fails trust validation, use Windows Settings to repair it before updating; do not bypass the trust check. Reopen the terminal, confirm `winget --version` is at least `v1.29.280`, then run setup again. [Microsoft's App Installer guidance](https://learn.microsoft.com/en-us/windows/msix/app-installer/install-update-app-installer) has the official installation and update options. Setup checks WinGet before downloading private Python packages and again before reporting success; it does not reset or rewrite WinGet sources.
 
 ## license
 

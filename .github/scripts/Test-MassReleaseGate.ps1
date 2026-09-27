@@ -1,8 +1,16 @@
+param(
+    [string]$ReleaseRoot
+)
+
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version 3
 
-$root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')).TrimEnd('\')
+$root = if ($ReleaseRoot) {
+    [IO.Path]::GetFullPath($ReleaseRoot).TrimEnd('\')
+} else {
+    [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')).TrimEnd('\')
+}
 $installer = Join-Path $root 'Installer.bat'
 $app = Join-Path $root 'Mass Installer.pyw'
 $runtime = Join-Path $root '.runtime'
@@ -10,6 +18,8 @@ $python = Join-Path $runtime 'python\python.exe'
 $pythonw = Join-Path $runtime 'python\pythonw.exe'
 $pipWheel = Join-Path $runtime 'python\pip.whl'
 $sitePackages = Join-Path $runtime 'python\Lib\site-packages'
+$pythonDir = Join-Path $runtime 'python'
+$venv = Join-Path $root '.venv'
 $cache = Join-Path $runtime 'trusted-winget-path.txt'
 $marker = Join-Path $runtime 'setup-complete.txt'
 $lock = Join-Path $runtime 'setup.lock'
@@ -46,19 +56,42 @@ function Invoke-Setup([switch]$ConfirmInteractively) {
 function Read-SetupOutcome {
     $text = [IO.File]::ReadAllText($log, [Text.Encoding]::UTF8)
     $resolverMatches = [regex]::Matches($text, '(?m)^FLEECE_WINGET_STATE=(trusted|exact-package-absent|present-invalid|unsupported-version)\r?$')
-    if ($resolverMatches.Count -ne 1) {
-        throw "Expected exactly one raw resolver state in setup.log; found $($resolverMatches.Count)."
-    }
     $outcomeMatches = [regex]::Matches($text, '(?m)^\[[^\r\n]+\] FLEECE_SETUP_WINGET_OUTCOME=(trusted|exact-package-absent|present-invalid|unsupported-version|resolver-error)\r?$')
-    if ($outcomeMatches.Count -ne 1) {
-        throw "Expected exactly one setup WinGet outcome in setup.log; found $($outcomeMatches.Count)."
+    if ($resolverMatches.Count -lt 1 -or $resolverMatches.Count -gt 2 -or $resolverMatches.Count -ne $outcomeMatches.Count) {
+        throw "Expected one or two paired WinGet checks in setup.log; found $($resolverMatches.Count) resolver states and $($outcomeMatches.Count) setup outcomes."
     }
-    $resolverState = $resolverMatches[0].Groups[1].Value
-    $setupState = $outcomeMatches[0].Groups[1].Value
-    if ($resolverState -cne $setupState) {
-        throw "Resolver state '$resolverState' did not match setup state '$setupState'."
+    $states = [string[]]::new($resolverMatches.Count)
+    for ($index = 0; $index -lt $resolverMatches.Count; $index++) {
+        $resolverState = $resolverMatches[$index].Groups[1].Value
+        $setupState = $outcomeMatches[$index].Groups[1].Value
+        if ($resolverState -cne $setupState) {
+            throw "WinGet check $($index + 1): resolver state '$resolverState' did not match setup state '$setupState'."
+        }
+        $states[$index] = $resolverState
     }
-    [pscustomobject]@{ State = $resolverState; Text = $text }
+    [pscustomobject]@{ State = $states[-1]; States = $states; Count = $states.Length; Text = $text }
+}
+
+function Assert-OutcomeSequence($Outcome, [string[]]$Expected) {
+    if ($Outcome.Count -ne $Expected.Length) {
+        throw "Expected WinGet outcomes '$($Expected -join ', ')'; found '$($Outcome.States -join ', ')'."
+    }
+    for ($index = 0; $index -lt $Expected.Length; $index++) {
+        if ($Outcome.States[$index] -cne $Expected[$index]) {
+            throw "WinGet check $($index + 1): expected '$($Expected[$index])', found '$($Outcome.States[$index])'."
+        }
+    }
+}
+
+function Assert-NoPrivatePython($Outcome) {
+    foreach ($path in @($pythonDir, $python, $pythonw, $pipWheel, $sitePackages, $venv)) {
+        if (Test-Path -LiteralPath $path) {
+            throw "WinGet preflight failed only after private Python setup had begun: $path"
+        }
+    }
+    if ($Outcome.Text -match 'Downloading: https://www\.python\.org/|Installing pinned PySide6-Essentials|Official embedded CPython passed local validation|PySide6-Essentials=') {
+        throw 'WinGet preflight failed only after private Python/PySide setup had begun.'
+    }
 }
 
 function Assert-PrivateRuntime {
@@ -95,7 +128,7 @@ function Assert-TrustedCache {
     [void](Require-NormalFile $target 'Trusted cached WinGet executable')
 }
 
-foreach ($path in @($marker, $shortcut, $cache, $lock)) {
+foreach ($path in @($marker, $shortcut, $cache, $lock, $pythonDir, $venv)) {
     if (Test-Path -LiteralPath $path) {
         throw "The clean release gate started with stale private setup state: $path"
     }
@@ -109,23 +142,81 @@ $first = Read-SetupOutcome
 
 switch ($first.State) {
     'trusted' {
+        Assert-OutcomeSequence $first @('trusted', 'trusted')
         if ($firstCode -ne 0) { throw "Trusted WinGet setup failed with exit code $firstCode." }
         if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) { throw 'Trusted setup did not publish the setup marker.' }
         if (-not (Test-Path -LiteralPath $shortcut -PathType Leaf)) { throw 'Trusted setup did not publish the app shortcut.' }
         if ($first.Text -notmatch '(?m)^\[[^\r\n]+\] Setup completed successfully\.\r?$') { throw 'Trusted setup did not log successful completion.' }
+        if ($first.Text -notmatch 'Windows shortcut creation and readback passed preflight\.') { throw 'Trusted setup skipped the shortcut creation preflight.' }
         Assert-TrustedCache
         Assert-PrivateRuntime
+
+        $originalApp = [IO.File]::ReadAllBytes($app)
+        try {
+            [IO.File]::WriteAllBytes($app, [Text.Encoding]::UTF8.GetBytes('def :'))
+            $badSourceCommand = 'call "{0}" --yes --no-pause' -f $installer
+            $badSourceOutput = @(& $cmd /d /c $badSourceCommand 2>&1)
+            $badSourceCode = $LASTEXITCODE
+            $badSourceText = $badSourceOutput | Out-String
+            Write-Host $badSourceText
+            if ($badSourceCode -ne 1) { throw "Malformed app source returned exit code $badSourceCode instead of 1." }
+            if ($badSourceText -notmatch 'Checking bundled app source' -or $badSourceText -notmatch 'Mass Installer\.pyw is invalid or unreadable') {
+                throw 'Malformed app source did not fail at its early source check.'
+            }
+            if ($badSourceText -match '\[ STEP 2 / 3 \]') {
+                throw 'Malformed app source was discovered only after package setup began.'
+            }
+            if ($badSourceText -notmatch 'How to fix it:' -or $badSourceText -notmatch 'Re-extract the entire official release ZIP') {
+                throw 'The early source failure did not display its repair instructions.'
+            }
+            $badSourceLog = [IO.File]::ReadAllText($log, [Text.Encoding]::UTF8)
+            if ($badSourceLog -notmatch 'SyntaxError' -or $badSourceLog -notmatch 'HOW_TO_FIX: Re-extract the entire official release ZIP' -or $badSourceLog -match 'Setup completed successfully\.') {
+                throw 'The early source failure log is missing the cause or repair instructions, or falsely reports success.'
+            }
+            Assert-OutcomeSequence (Read-SetupOutcome) @('trusted')
+        } finally {
+            [IO.File]::WriteAllBytes($app, $originalApp)
+        }
+
+        $testIcon = Join-Path $root 'assets\app-icons\googlechrome.svg'
+        $originalIcon = [IO.File]::ReadAllBytes($testIcon)
+        try {
+            [IO.File]::Delete($testIcon)
+            $missingIconCommand = 'call "{0}" --yes --no-pause' -f $installer
+            $missingIconOutput = @(& $cmd /d /c $missingIconCommand 2>&1)
+            $missingIconCode = $LASTEXITCODE
+            $missingIconText = $missingIconOutput | Out-String
+            Write-Host $missingIconText
+            if ($missingIconCode -ne 1) { throw "Missing icon returned exit code $missingIconCode instead of 1." }
+            if ($missingIconText -notmatch 'Checking bundled app icons' -or $missingIconText -notmatch 'bundled app icons are missing or invalid') {
+                throw 'Missing icon did not fail at its early asset check.'
+            }
+            if ($missingIconText -match '\[ STEP 2 / 3 \]') {
+                throw 'Missing icon was discovered only after package setup began.'
+            }
+            $missingIconLog = [IO.File]::ReadAllText($log, [Text.Encoding]::UTF8)
+            if ($missingIconLog -notmatch 'Missing or unsafe icons: googlechrome\.svg' -or $missingIconLog -notmatch 'HOW_TO_FIX: Re-extract the entire official release ZIP, including its assets folder' -or $missingIconLog -match 'Setup completed successfully\.') {
+                throw 'The early missing-icon log is missing the cause or repair instructions, or falsely reports success.'
+            }
+            Assert-OutcomeSequence (Read-SetupOutcome) @('trusted')
+        } finally {
+            [IO.File]::WriteAllBytes($testIcon, $originalIcon)
+        }
 
         $repairCode = Invoke-Setup
         if ($repairCode -ne 0) { throw "Trusted WinGet repair failed with exit code $repairCode." }
         $repair = Read-SetupOutcome
-        if ($repair.State -cne 'trusted') { throw "Repair changed the WinGet outcome to '$($repair.State)'." }
+        Assert-OutcomeSequence $repair @('trusted', 'trusted')
         if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) { throw 'Repair lost the setup marker.' }
         if (-not (Test-Path -LiteralPath $shortcut -PathType Leaf)) { throw 'Repair lost the app shortcut.' }
         Assert-TrustedCache
         Assert-PrivateRuntime
     }
     'exact-package-absent' {
+        Assert-OutcomeSequence $first @('exact-package-absent')
+        if ($env:FLEECE_REQUIRE_TRUSTED_WINGET -ceq '1') {
+            throw 'The required Windows 11 positive runner did not have a trusted supported WinGet installation.'
+        }
         if ($firstCode -eq 0) { throw 'Setup reported success even though the exact Desktop App Installer package was absent.' }
         if ($firstCode -ne 1) { throw "Expected the setup failure wrapper to return 1 for exact package absence; got $firstCode." }
         $expectedError = 'Microsoft Desktop App Installer is not registered for this Windows user\. Install or update App Installer from Microsoft, then run this setup again\.'
@@ -133,16 +224,20 @@ switch ($first.State) {
         if ($errors.Count -ne 1 -or $errors[0].Value -notmatch $expectedError) {
             throw 'Exact package absence did not fail only at the expected WinGet gate.'
         }
+        if ($first.Text -notmatch 'HOW_TO_FIX: Install or update App Installer from Microsoft Store' -or $first.Text -notmatch 'HOW_TO_FIX_LINK: https://apps\.microsoft\.com/detail/9nblggh4nns1') {
+            throw 'Absent App Installer did not include its specific repair instructions.'
+        }
         if ($first.Text -match '(?m)^\[[^\r\n]+\] Setup completed successfully\.\r?$') { throw 'Absent-package setup falsely logged success.' }
         foreach ($path in @($marker, $shortcut, $cache, $lock)) {
             if (Test-Path -LiteralPath $path) { throw "Absent-package setup published forbidden success state: $path" }
         }
-        Assert-PrivateRuntime
+        Assert-NoPrivatePython $first
     }
     'present-invalid' {
         throw 'Desktop App Installer is present but failed the trusted WinGet contract; this runner is not an expected unavailable-server case.'
     }
     'unsupported-version' {
+        Assert-OutcomeSequence $first @('unsupported-version')
         if ($env:FLEECE_ALLOW_TRUSTED_OLD_WINGET -cne '1') {
             throw 'A trusted but unsupported WinGet is allowed only on the explicitly identified Windows Server 2025 runner.'
         }
@@ -159,11 +254,14 @@ switch ($first.State) {
         if ($errors.Count -ne 1 -or $errors[0].Value -notmatch $expectedError) {
             throw 'Unsupported WinGet did not fail only at the expected minimum-version gate.'
         }
+        if ($first.Text -notmatch 'HOW_TO_FIX_COMMAND: winget upgrade Microsoft\.AppInstaller' -or $first.Text -notmatch 'HOW_TO_FIX_LINK: https://apps\.microsoft\.com/detail/9nblggh4nns1') {
+            throw 'Outdated WinGet did not include its specific upgrade command and fallback.'
+        }
         if ($first.Text -match '(?m)^\[[^\r\n]+\] Setup completed successfully\.\r?$') { throw 'Unsupported WinGet setup falsely logged success.' }
         foreach ($path in @($marker, $shortcut, $cache, $lock)) {
             if (Test-Path -LiteralPath $path) { throw "Unsupported WinGet setup published forbidden success state: $path" }
         }
-        Assert-PrivateRuntime
+        Assert-NoPrivatePython $first
     }
     default {
         throw "Unexpected WinGet state '$($first.State)'."
@@ -174,3 +272,4 @@ if ($env:GITHUB_OUTPUT) {
     [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "winget_state=$($first.State)`n", [Text.UTF8Encoding]::new($false))
 }
 Write-Host "Mass release gate passed with WinGet state: $($first.State)"
+exit 0
