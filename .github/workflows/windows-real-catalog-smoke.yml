@@ -47,6 +47,7 @@ jobs:
           Expand-Archive -LiteralPath $archive -DestinationPath $longRoot
           $installer = Join-Path $longRoot 'Installer.bat'
           $command = 'call "{0}" --yes --no-pause' -f $installer
+          $PSNativeCommandUseErrorActionPreference = $false
           $output = @(& "$env:SystemRoot\System32\cmd.exe" /d /c $command 2>&1)
           $code = $LASTEXITCODE
           $text = $output | Out-String
