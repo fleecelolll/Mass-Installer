@@ -312,10 +312,10 @@ if errorlevel 1 (
     set "REPAIR_HINT=Re-extract the entire official release ZIP, then rerun Installer.bat."
     goto Failed
 )
-echo      Checking bundled app icons and image...
+echo      Checking bundled app icons...
 call :CheckBundledAssets
 if errorlevel 1 (
-    set "FAIL_MESSAGE=One or more bundled app icons or the app image are missing or invalid."
+    set "FAIL_MESSAGE=One or more bundled app icons are missing or invalid."
     set "REPAIR_HINT=Re-extract the entire official release ZIP, including its assets folder, then rerun setup."
     goto Failed
 )
@@ -1011,7 +1011,7 @@ set "REPAIR_HINT=Re-extract the entire official release ZIP, then rerun setup."
 exit /b 1
 
 :FinalAssetsFailed
-set "FAIL_MESSAGE=Bundled app icons or image failed final verification."
+set "FAIL_MESSAGE=Bundled app icons failed final verification."
 set "REPAIR_HINT=Re-extract the entire official release ZIP, including its assets folder, then rerun setup."
 exit /b 1
 
@@ -1029,7 +1029,7 @@ exit /b %ERRORLEVEL%
 :CheckBundledAssets
 if not defined APP_PY exit /b 1
 if not exist "%APP_PY%" exit /b 1
-"%APP_PY%" -I -c "import ast, os, re, xml.etree.ElementTree as ET; from pathlib import Path; app=Path(os.environ['APP_FILE']); tree=ast.parse(app.read_text(encoding='utf-8')); assignments=[s.value for s in tree.body if isinstance(s,ast.Assign) for t in s.targets if isinstance(t,ast.Name) and t.id=='ICON_SLUG_BY_PACKAGE']; assert len(assignments)==1, 'Missing icon mapping'; icons=ast.literal_eval(assignments[0]); assert isinstance(icons,dict) and len(icons)==49, 'Unexpected icon mapping'; assert all(isinstance(s,str) and re.fullmatch(r'[a-z0-9]+',s) for s in icons.values()), 'Invalid icon slug'; assets=app.parent/'assets'; folder=assets/'app-icons'; assert assets.is_dir() and not assets.is_symlink() and folder.is_dir() and not folder.is_symlink(), 'Missing or linked icon folder'; files=[folder/(s+'.svg') for s in icons.values()]; bad=[p.name for p in files if not p.is_file() or p.is_symlink() or p.stat().st_size<1]; assert not bad, 'Missing or unsafe icons: '+', '.join(bad); [ET.parse(p) for p in files]; image=app.parent/'Mass Installer.png'; assert image.is_file() and not image.is_symlink() and image.stat().st_size>0, 'Missing or unsafe app image'; print('Bundled app icons and image passed preflight.')" >>"%LOG%" 2>&1
+"%APP_PY%" -I -c "import ast, os, re, xml.etree.ElementTree as ET; from pathlib import Path; app=Path(os.environ['APP_FILE']); tree=ast.parse(app.read_text(encoding='utf-8')); assignments=[s.value for s in tree.body if isinstance(s,ast.Assign) for t in s.targets if isinstance(t,ast.Name) and t.id=='ICON_SLUG_BY_PACKAGE']; assert len(assignments)==1, 'Missing icon mapping'; icons=ast.literal_eval(assignments[0]); assert isinstance(icons,dict) and len(icons)==49, 'Unexpected icon mapping'; assert all(isinstance(s,str) and re.fullmatch(r'[a-z0-9]+',s) for s in icons.values()), 'Invalid icon slug'; assets=app.parent/'assets'; folder=assets/'app-icons'; assert assets.is_dir() and not assets.is_symlink() and folder.is_dir() and not folder.is_symlink(), 'Missing or linked icon folder'; files=[folder/(s+'.svg') for s in icons.values()]; bad=[p.name for p in files if not p.is_file() or p.is_symlink() or p.stat().st_size<1]; assert not bad, 'Missing or unsafe icons: '+', '.join(bad); [ET.parse(p) for p in files]; print('Bundled app icons passed preflight.')" >>"%LOG%" 2>&1
 exit /b %ERRORLEVEL%
 
 :CheckShortcutSupport

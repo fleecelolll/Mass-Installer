@@ -1,8 +1,16 @@
+param(
+    [string]$ReleaseRoot
+)
+
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version 3
 
-$root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')).TrimEnd('\')
+$root = if ($ReleaseRoot) {
+    [IO.Path]::GetFullPath($ReleaseRoot).TrimEnd('\')
+} else {
+    [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')).TrimEnd('\')
+}
 $installer = Join-Path $root 'Installer.bat'
 $app = Join-Path $root 'Mass Installer.pyw'
 $runtime = Join-Path $root '.runtime'
@@ -180,7 +188,7 @@ switch ($first.State) {
             $missingIconText = $missingIconOutput | Out-String
             Write-Host $missingIconText
             if ($missingIconCode -ne 1) { throw "Missing icon returned exit code $missingIconCode instead of 1." }
-            if ($missingIconText -notmatch 'Checking bundled app icons and image' -or $missingIconText -notmatch 'bundled app icons or the app image are missing or invalid') {
+            if ($missingIconText -notmatch 'Checking bundled app icons' -or $missingIconText -notmatch 'bundled app icons are missing or invalid') {
                 throw 'Missing icon did not fail at its early asset check.'
             }
             if ($missingIconText -match '\[ STEP 2 / 3 \]') {
