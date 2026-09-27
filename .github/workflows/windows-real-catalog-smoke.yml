@@ -58,6 +58,7 @@ jobs:
           if (Test-Path -LiteralPath (Join-Path $longRoot '.runtime')) {
             throw 'Overlong path check ran after private runtime creation.'
           }
+          exit 0
 
       - name: Install the exact ZIP on the disposable runner
         shell: pwsh
