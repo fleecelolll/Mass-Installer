@@ -20,7 +20,7 @@ from typing import Optional
 
 
 APP_TITLE = "Mass Installer"
-APP_VERSION = "1.0.13"
+APP_VERSION = "1.0.14"
 APP_DIR = Path(__file__).resolve().parent
 RUNTIME_DIR = APP_DIR / ".runtime"
 LOGS_DIR = RUNTIME_DIR / "logs"
@@ -2897,7 +2897,7 @@ exit 1
 
 
 def run_self_test(application: QApplication) -> int:
-    assert APP_VERSION == "1.0.13"
+    assert APP_VERSION == "1.0.14"
     assert acquire_app_mutex()
     assert not acquire_app_mutex()
     release_app_mutex()

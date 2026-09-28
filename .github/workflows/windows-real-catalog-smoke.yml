@@ -28,7 +28,7 @@ jobs:
       - name: Build and freshly extract the release ZIP
         shell: pwsh
         run: |
-          $archive = Join-Path $env:RUNNER_TEMP 'Mass-Installer-v1.0.13.zip'
+          $archive = Join-Path $env:RUNNER_TEMP 'Mass-Installer-v1.0.14.zip'
           $releaseRoot = Join-Path $env:RUNNER_TEMP 'mass-real-qa'
           if ((Test-Path -LiteralPath $archive) -or (Test-Path -LiteralPath $releaseRoot)) {
             throw 'The release test paths must start empty.'
@@ -40,7 +40,7 @@ jobs:
       - name: Reject an overlong release folder before downloads
         shell: pwsh
         run: |
-          $archive = Join-Path $env:RUNNER_TEMP 'Mass-Installer-v1.0.13.zip'
+          $archive = Join-Path $env:RUNNER_TEMP 'Mass-Installer-v1.0.14.zip'
           $longRoot = Join-Path $env:RUNNER_TEMP ('mass-installer-long-path-check-' + ('x' * 55))
           if ($longRoot.Length -le 72) { throw 'The negative-test path is not long enough.' }
           if (Test-Path -LiteralPath $longRoot) { throw 'The negative-test path must start empty.' }
