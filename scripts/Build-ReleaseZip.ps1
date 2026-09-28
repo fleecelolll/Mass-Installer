@@ -57,13 +57,13 @@ try {
         throw "The archive filename must be Mass-Installer-v$version.zip."
     }
 
-    $fixed = @('Installer.bat', 'LICENSE', 'Mass Installer.pyw', 'READ ME.txt', 'assets/THIRD_PARTY_NOTICES.md')
+    $fixed = @('Installer.bat', 'LICENSE', 'Mass Installer.pyw', 'READ ME.txt', 'assets/THIRD_PARTY_NOTICES.md', 'requirements-win-arm64.txt', 'requirements-win-x64.txt')
     $trackedIcons = @(& git ls-files -- 'assets/app-icons/*.svg')
     if ($LASTEXITCODE -ne 0 -or $trackedIcons.Count -ne 49) {
         throw "Expected exactly 49 tracked app icons; found $($trackedIcons.Count)."
     }
     $paths = @($fixed + $trackedIcons | Sort-Object -CaseSensitive)
-    if ($paths.Count -ne 54 -or (@($paths | Select-Object -Unique)).Count -ne 54) {
+    if ($paths.Count -ne 56 -or (@($paths | Select-Object -Unique)).Count -ne 56) {
         throw 'The release file list is incomplete or contains duplicates.'
     }
     $committed = @{}
