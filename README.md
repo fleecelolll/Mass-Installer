@@ -2,6 +2,10 @@
 
 # mass installer
 
+Current audit update: **v1.0.15**. Includes app-specific bug fixes, bounded offline regression/performance tests, and shared setup hardening.
+
+All Fleece desktop tools use the same installation workflow: download the official ZIP, extract the entire folder, run `Installer.bat`, accept the bundled Terms/Tool License, wait for final checks, then open the folder-local shortcut. Setup installs a private runtime without changing system Python or requiring administrator access. Rerun it to repair or refresh a moved shortcut. Keep the full path at most 72 characters, without percent signs. Architecture support and extra components vary by tool; File Converter remains x64-only.
+
 A little tool I made with AI to quickly install or update useful Windows apps together through WinGet locally on 64-bit Windows.
 
 <img src="Mass%20Installer.png" alt="Mass Installer app window" width="760">
@@ -43,7 +47,7 @@ Setup keeps the private Python runtime, dependencies, settings, and every app co
 
 Setup pins and verifies official Python 3.14.7, pip, PySide6-Essentials, and the official WinGet source contract. Downloaded runtime archives and the complete PyPI wheel dependency set are checked against pinned SHA-256 hashes before use. Setup automatically selects the bundled x64 or ARM64 requirements file; keep both files with the extracted release.
 
-Run `Installer.bat` again to repair the private components or after moving the complete folder. Setup preserves app selections and logs and recreates the shortcut for the folder's current location.
+Run `Installer.bat` again to repair the private components or after moving the complete folder. Setup preserves saved selection files and logs and recreates the shortcut for the folder's current location. The current selection is not automatically restored after closing the app; use **Save selection** and **Load selection** to reuse it.
 
 ## 1.0.14 security update
 
@@ -61,6 +65,10 @@ Run `Installer.bat` again to repair the private components or after moving the c
 5. Leave Mass Installer open while the queue finishes.
 
 Mass Installer uses selected package IDs from its catalog. WinGet resolves those IDs through the verified Microsoft community source and follows the publisher download locations defined there. A publisher installer can still request administrator approval, show its own window, require a license, or request a restart.
+
+**Stop after current app** lets the active installer finish and cancels the remaining queue. Pressing it again offers a separately confirmed emergency force stop of WinGet. Force stopping can leave an app partially installed, and a publisher installer may continue separately. Closing the window during an active queue does not silently kill an installer.
+
+Installer output is processed in 64 KiB slices to keep window events responsive. Individual output lines retain at most 8,192 characters; result classification retains the latest 300 lines, and the activity view retains 1,500 lines. Session logs are capped at 4 MiB. Managed install/crash logs are normally retained for at most 30 days, 20 files, and 32 MiB in total, with the current session protected. These are application-level limits, not a cap on a publisher installer's memory, disk use, or execution time.
 
 ## built with
 
@@ -85,6 +93,10 @@ If a trusted WinGet is merely outdated, open a normal PowerShell or Command Prom
 ## license
 
 Copyright 2026 Fleece. This project is source-available, not open source. The bundled [LICENSE](LICENSE) permits downloading, installing, and running an unmodified official release for lawful personal, non-commercial use. Modification, redistribution, sale, rebranding, and derivative versions remain prohibited. Third-party materials retain their own licenses, as listed in [assets/THIRD_PARTY_NOTICES.md](assets/THIRD_PARTY_NOTICES.md).
+
+## offline regression checks
+
+From the extracted source folder, run `.runtime\python\python.exe -I scripts\Test-AppSafety.py`. The suite uses fake WinGet processes, offscreen Qt, and disposable profile/log files. It does not install any catalog app. It checks profile validation and atomic saves, source/version checks, safe command construction, cancellation, streamed UTF-8 output, resource limits, and bounded GUI workloads. Use `--report PATH` to save measurements as JSON. Timing budgets are regression tripwires, not installation-speed guarantees.
 
 ## note
 

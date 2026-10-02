@@ -1,5 +1,12 @@
 MASS INSTALLER
 
+AUDIT UPDATE v1.0.15
+Shared setup: extract the complete official ZIP, run Installer.bat, accept the
+bundled Terms/Tool License, wait for every final check, then use the folder-local
+shortcut. Setup needs no administrator access and keeps Python private.
+Run setup again to repair or refresh a moved shortcut. Keep the complete folder
+path at most 72 characters and do not use percent signs in its name.
+
 A little tool I made with AI to quickly install or update useful Windows apps together through WinGet locally on 64-bit Windows.
 
 INSTALL
@@ -22,11 +29,25 @@ USE
 4. Choose Install.
 5. Leave Mass Installer open while the queue finishes.
 
+Use Save selection and Load selection to reuse app choices. The current
+selection is not automatically restored after closing the app.
+
+Stop after current app lets the active installer finish and cancels the
+remaining queue. Pressing it again offers a separately confirmed emergency
+force stop of WinGet. Force stopping can leave an app partly installed, and
+a publisher installer may continue separately.
+
+Output is processed in 64 KiB slices. Lines retain at most 8,192 characters;
+result classification keeps the latest 300 lines and the activity view keeps
+1,500 lines. Session logs are capped at 4 MiB. Managed install/crash logs are
+normally retained for at most 30 days, 20 files, and 32 MiB in total, with the
+current session protected. These limits do not cap publisher installers.
+
 SETUP DETAILS
 
 Setup keeps official Python 3.14.7, PySide6-Essentials, settings, and app-specific files private to this folder. It verifies the official WinGet source without resetting or rewriting it. It does not require administrator access, change PATH, or install global Python packages. Downloaded runtime archives are verified before use.
 
-Setup creates and validates a folder-local Mass Installer shortcut that starts the app directly with this folder's private runtime. Run Installer.bat again to repair setup or after moving the complete folder. Saved selections and logs are preserved.
+Setup creates and validates a folder-local Mass Installer shortcut that starts the app directly with this folder's private runtime. Run Installer.bat again to repair setup or after moving the complete folder. Saved selection files and logs are preserved.
 
 PRIVACY AND REMOVAL
 
@@ -52,6 +73,13 @@ Microsoft guidance:
 https://learn.microsoft.com/en-us/windows/msix/app-installer/install-update-app-installer
 Setup checks WinGet before downloading private Python packages and again
 before success.
+
+OFFLINE REGRESSION CHECKS
+
+Run .runtime\python\python.exe -I scripts\Test-AppSafety.py from this folder.
+The suite uses fake WinGet processes, offscreen Qt, and disposable files; it
+does not install any catalog app. Use --report PATH to save measurements as
+JSON. Timing budgets detect regressions and do not guarantee install speed.
 
 LICENSE
 

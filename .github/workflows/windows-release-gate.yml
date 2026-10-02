@@ -38,7 +38,7 @@ jobs:
       - name: Build and freshly extract the exact release ZIP
         shell: pwsh
         run: |
-          $archive = Join-Path $env:RUNNER_TEMP 'Mass-Installer-v1.0.14.zip'
+          $archive = Join-Path $env:RUNNER_TEMP 'Mass-Installer-v1.0.15.zip'
           $releaseRoot = Join-Path $env:RUNNER_TEMP 'mass release qa'
           if ((Test-Path -LiteralPath $archive) -or (Test-Path -LiteralPath $releaseRoot)) {
             throw 'The release test paths must start empty.'

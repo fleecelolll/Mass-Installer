@@ -20,7 +20,7 @@ from typing import Optional
 
 
 APP_TITLE = "Mass Installer"
-APP_VERSION = "1.0.14"
+APP_VERSION = "1.0.15"
 APP_DIR = Path(__file__).resolve().parent
 RUNTIME_DIR = APP_DIR / ".runtime"
 LOGS_DIR = RUNTIME_DIR / "logs"
@@ -44,6 +44,7 @@ APP_MUTEX_NAMES = (
 )
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 MAX_INSTALL_OUTPUT_LINE_CHARS = 8192
+MAX_INSTALL_OUTPUT_READ_BYTES = 64 * 1024
 OUTPUT_TRUNCATION_PREFIX = "[earlier output truncated] "
 MAX_INSTALL_LOG_BLOCKS = 1500
 MAX_SESSION_LOG_BYTES = 4 * 1024 * 1024
@@ -1306,6 +1307,7 @@ class MassInstaller(QMainWindow):
         self.current_app: Optional[AppDefinition] = None
         self.process: Optional[QProcess] = None
         self.process_decoder = None
+        self.process_result_pending = None
         self.process_line_buffer = ""
         self.current_output_lines: list[str] = []
         self.install_active = False
@@ -1349,7 +1351,7 @@ class MassInstaller(QMainWindow):
         self.build_ui()
         self.update_selection_ui()
         if "--self-test" not in sys.argv:
-            QTimer.singleShot(0, self.start_winget_preflight)
+            QTimer.singleShot(0, self, self.start_winget_preflight)
 
     @staticmethod
     def _system_powershell() -> Optional[Path]:
@@ -2035,7 +2037,8 @@ exit 1
             self.INSTALL_PAGE: self.stop_button,
             self.RESULTS_PAGE: self.retry_button,
         }
-        QTimer.singleShot(0, lambda target=focus_targets[index]: target.setFocus(Qt.OtherFocusReason))
+        target = focus_targets[index]
+        QTimer.singleShot(0, target, lambda: target.setFocus(Qt.OtherFocusReason))
 
     def clear_page_animation(self):
         if self.page_animation is not None:
@@ -2354,9 +2357,14 @@ exit 1
         )
 
     def finish_winget_preflight(self, ready: bool, version: str):
-        self.winget_version = version
+        # Trusted executables can still emit malformed output; keep diagnostics
+        # bounded and reject enormous version integers before converting them.
+        self.winget_version = version[:64]
         self.winget_supports_no_progress = False
-        match = re.fullmatch(r"v?(\d+)\.(\d+)(?:\.(\d+))?(?:\.\d+)?", version.strip())
+        match = re.fullmatch(
+            r"v?([0-9]{1,10})\.([0-9]{1,10})(?:\.([0-9]{1,10}))?(?:\.[0-9]{1,10})?",
+            version.strip(),
+        ) if len(version) <= 64 else None
         if match:
             major = int(match.group(1))
             minor = int(match.group(2))
@@ -2528,6 +2536,7 @@ exit 1
         self.force_stopping = False
         self.current_output_lines = []
         self.process_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        self.process_result_pending = None
         self.process_line_buffer = ""
         row = self.queue_rows[self.current_app.package_id]
         row.set_status("Installing", "installing")
@@ -2540,12 +2549,21 @@ exit 1
         self.process.errorOccurred.connect(self.install_process_error)
         self.process.start(str(self.winget_path), self.build_winget_arguments(self.current_app))
 
-    def read_install_output(self):
+    def read_install_output(self, expected_process=None):
+        if expected_process is not None and self.process is not expected_process:
+            return
         if self.process is None or self.process_decoder is None:
             return
-        data = bytes(self.process.readAllStandardOutput())
+        process = self.process
+        # A publisher may emit a large burst. Drain at most one bounded slice
+        # per event turn, so Stop and window events keep receiving service.
+        data = bytes(process.read(MAX_INSTALL_OUTPUT_READ_BYTES))
         if data:
             self.consume_install_text(self.process_decoder.decode(data), final=False)
+        if process.bytesAvailable():
+            QTimer.singleShot(0, self, lambda: self.read_install_output(process))
+        elif self.process_result_pending is not None:
+            self.finalize_install_process()
 
     def consume_install_text(self, text: str, final: bool):
         self.process_line_buffer += text.replace("\r\n", "\n").replace("\r", "\n")
@@ -2573,7 +2591,14 @@ exit 1
     def install_process_finished(self, exit_code, exit_status):
         if self.process is None or self.current_app is None:
             return
-        self.read_install_output()
+        self.process_result_pending = (exit_code, exit_status)
+        self.read_install_output(self.process)
+
+    def finalize_install_process(self):
+        if self.process_result_pending is None:
+            return
+        exit_code, exit_status = self.process_result_pending
+        self.process_result_pending = None
         if self.process_decoder is not None:
             self.consume_install_text(self.process_decoder.decode(b"", final=True), final=True)
         output = "\n".join(self.current_output_lines)
@@ -2701,6 +2726,7 @@ exit 1
         self.process = None
         self.current_app = None
         self.process_decoder = None
+        self.process_result_pending = None
         self.process_line_buffer = ""
         self.force_stopping = False
         if process is not None:
@@ -2897,7 +2923,7 @@ exit 1
 
 
 def run_self_test(application: QApplication) -> int:
-    assert APP_VERSION == "1.0.14"
+    assert APP_VERSION == "1.0.15"
     assert acquire_app_mutex()
     assert not acquire_app_mutex()
     release_app_mutex()
